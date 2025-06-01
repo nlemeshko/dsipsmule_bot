@@ -539,6 +539,9 @@ def help_command(message: types.Message):
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message: types.Message):
+    # Логирование в самом начале функции для отладки получения всех сообщений
+    logging.info(f"[handle_message start] Получено сообщение от {message.from_user.id}. Chat ID: {message.chat.id}. Content Type: {message.content_type}")
+
     if message.chat.type not in ['private']:
         return
     user_id = message.from_user.id
@@ -566,39 +569,7 @@ def handle_message(message: types.Message):
     # FSM: если пользователь пишет анонимку
     if user_states.get(user_id) == ANON_STATE:
         logging.info(f"Пользователь {user_id} в ANON_STATE. Проверка типа сообщения.")
-        if message.photo:
-            # Обработка фотографий
-            logging.info(f"Получена фотография от {user_id}. Размеры фото: {[p.file_size for p in message.photo]}")
-            photo_id = message.photo[-1].file_id  # Берем последнюю (самую большую) версию фото
-            caption = message.caption or ""
-            anon_text = f"{caption}\n\n#анон" if caption else "#анон"
-            try:
-                for admin_id in ADMIN_IDS:
-                    bot.send_photo(admin_id, photo_id, caption=anon_text)
-                logging.info(f"Анонимная фотография от {user_id} успешно отправлена на модерацию")
-                bot.reply_to(message, "Спасибо! Ваша анонимная фотография отправлена на модерацию.")
-            except Exception as e:
-                logging.error(f"Ошибка при отправке фото админам: {e}")
-                bot.reply_to(message, "Произошла ошибка при отправке фотографии. Попробуйте еще раз.")
-            user_states.pop(user_id, None)
-            return
-        elif message.voice:
-            # Обработка голосовых сообщений
-            logging.info(f"Получено голосовое сообщение от {user_id}. Длительность: {message.voice.duration}с, размер: {message.voice.file_size} байт")
-            voice_id = message.voice.file_id
-            caption = message.caption or ""
-            anon_text = f"{caption}\n\n#анон" if caption else "#анон"
-            try:
-                for admin_id in ADMIN_IDS:
-                    bot.send_voice(admin_id, voice_id, caption=anon_text)
-                logging.info(f"Анонимное голосовое сообщение от {user_id} успешно отправлено на модерацию")
-                bot.reply_to(message, "Спасибо! Ваше анонимное голосовое сообщение отправлено на модерацию.")
-            except Exception as e:
-                logging.error(f"Ошибка при отправке голосового сообщения админам: {e}")
-                bot.reply_to(message, "Произошла ошибка при отправке голосового сообщения. Попробуйте еще раз.")
-            user_states.pop(user_id, None)
-            return
-        elif message.text:
+        if message.text:
             # Обработка текстовых сообщений
             text = message.text.strip()
             anon_text = f"{text}\n\n#анон"
@@ -608,9 +579,54 @@ def handle_message(message: types.Message):
             bot.reply_to(message, "Спасибо! Ваша анонимка отправлена на модерацию.")
             user_states.pop(user_id, None)
             return
-        else:
-            bot.reply_to(message, "Пожалуйста, отправьте текст, фотографию или голосовое сообщение.")
-            return
+        # Если получен не текст в состоянии анонимки, другие обработчики медиа будут вызваны.
+        # Если и там не обработается (т.е. не фото и не голос), тогда сработает else ниже.
+        # pass # Позволить другим обработчикам сообщений сработать
+
+@bot.message_handler(content_types=['photo'])
+def handle_anon_photo(message: types.Message):
+    user_id = message.from_user.id
+    if user_states.get(user_id) == ANON_STATE:
+        logging.info(f"[handle_anon_photo] Получена фотография от {user_id} в ANON_STATE.")
+        # Обработка фотографий
+        photo_id = message.photo[-1].file_id  # Берем последнюю (самую большую) версию фото
+        caption = message.caption or ""
+        anon_text = f"{caption}\n\n#анон" if caption else "#анон"
+        try:
+            for admin_id in ADMIN_IDS:
+                bot.send_photo(admin_id, photo_id, caption=anon_text)
+            logging.info(f"Анонимная фотография от {user_id} успешно отправлена на модерацию")
+            bot.reply_to(message, "Спасибо! Ваша анонимная фотография отправлена на модерацию.")
+        except Exception as e:
+            logging.error(f"[handle_anon_photo] Ошибка при отправке фото админам: {e}")
+            bot.reply_to(message, "Произошла ошибка при отправке фотографии. Попробуйте еще раз.")
+        user_states.pop(user_id, None)
+        return
+    # else: # Если не в ANON_STATE, позволяем сообщению пройти к другим обработчикам фото
+    #     pass
+
+@bot.message_handler(content_types=['voice'])
+def handle_anon_voice(message: types.Message):
+    user_id = message.from_user.id
+    if user_states.get(user_id) == ANON_STATE:
+        logging.info(f"[handle_anon_voice] Получено голосовое сообщение от {user_id} в ANON_STATE.")
+        # Обработка голосовых сообщений
+        voice_id = message.voice.file_id
+        caption = message.caption or ""
+        anon_text = f"{caption}\n\n#анон" if caption else "#анон"
+        try:
+            for admin_id in ADMIN_IDS:
+                bot.send_voice(admin_id, voice_id, caption=anon_text)
+            logging.info(f"Анонимное голосовое сообщение от {user_id} успешно отправлено на модерацию")
+            bot.reply_to(message, "Спасибо! Ваше анонимное голосовое сообщение отправлено на модерацию.")
+        except Exception as e:
+            logging.error(f"[handle_anon_voice] Ошибка при отправке голосового сообщения админам: {e}")
+            bot.reply_to(message, "Произошла ошибка при отправке голосового сообщения. Попробуйте еще раз.")
+        user_states.pop(user_id, None)
+        return
+    # else: # Если не в ANON_STATE, позволяем сообщению пройти к другим обработчикам голоса
+    #     pass
+
     # FSM: если пользователь предлагает песню
     if user_states.get(user_id) == SONG_STATE:
         text = message.text.strip()
