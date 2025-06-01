@@ -562,24 +562,34 @@ def handle_message(message: types.Message):
     if user_states.get(user_id) == ANON_STATE:
         if message.photo:
             # Обработка фотографий
+            logging.info(f"Получена фотография от {user_id}. Размеры фото: {[p.file_size for p in message.photo]}")
             photo_id = message.photo[-1].file_id  # Берем последнюю (самую большую) версию фото
             caption = message.caption or ""
             anon_text = f"{caption}\n\n#анон" if caption else "#анон"
-            for admin_id in ADMIN_IDS:
-                bot.send_photo(admin_id, photo_id, caption=anon_text)
-            logging.info(f"Анонимная фотография от {user_id} отправлена на модерацию")
-            bot.reply_to(message, "Спасибо! Ваша анонимная фотография отправлена на модерацию.")
+            try:
+                for admin_id in ADMIN_IDS:
+                    bot.send_photo(admin_id, photo_id, caption=anon_text)
+                logging.info(f"Анонимная фотография от {user_id} успешно отправлена на модерацию")
+                bot.reply_to(message, "Спасибо! Ваша анонимная фотография отправлена на модерацию.")
+            except Exception as e:
+                logging.error(f"Ошибка при отправке фото админам: {e}")
+                bot.reply_to(message, "Произошла ошибка при отправке фотографии. Попробуйте еще раз.")
             user_states.pop(user_id, None)
             return
         elif message.voice:
             # Обработка голосовых сообщений
+            logging.info(f"Получено голосовое сообщение от {user_id}. Длительность: {message.voice.duration}с, размер: {message.voice.file_size} байт")
             voice_id = message.voice.file_id
             caption = message.caption or ""
             anon_text = f"{caption}\n\n#анон" if caption else "#анон"
-            for admin_id in ADMIN_IDS:
-                bot.send_voice(admin_id, voice_id, caption=anon_text)
-            logging.info(f"Анонимное голосовое сообщение от {user_id} отправлено на модерацию")
-            bot.reply_to(message, "Спасибо! Ваше анонимное голосовое сообщение отправлено на модерацию.")
+            try:
+                for admin_id in ADMIN_IDS:
+                    bot.send_voice(admin_id, voice_id, caption=anon_text)
+                logging.info(f"Анонимное голосовое сообщение от {user_id} успешно отправлено на модерацию")
+                bot.reply_to(message, "Спасибо! Ваше анонимное голосовое сообщение отправлено на модерацию.")
+            except Exception as e:
+                logging.error(f"Ошибка при отправке голосового сообщения админам: {e}")
+                bot.reply_to(message, "Произошла ошибка при отправке голосового сообщения. Попробуйте еще раз.")
             user_states.pop(user_id, None)
             return
         elif message.text:
