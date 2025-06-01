@@ -565,6 +565,7 @@ def handle_message(message: types.Message):
 
     # FSM: если пользователь пишет анонимку
     if user_states.get(user_id) == ANON_STATE:
+        logging.info(f"Пользователь {user_id} в ANON_STATE. Проверка типа сообщения.")
         if message.photo:
             # Обработка фотографий
             logging.info(f"Получена фотография от {user_id}. Размеры фото: {[p.file_size for p in message.photo]}")
