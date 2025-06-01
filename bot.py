@@ -98,7 +98,8 @@ def button_callback(call: types.CallbackQuery):
     
     if call.data == "button1":
         user_states[user_id] = ANON_STATE
-        response_text = "Напиши текст анонимки (до 500 символов):"
+        logging.info(f"Установлено состояние ANON_STATE для пользователя {user_id}")
+        response_text = "Отправьте текст, фотографию или голосовое сообщение для анонимки:"
         image_path = 'anon.png'
         try:
             if os.path.exists(image_path):
@@ -541,7 +542,11 @@ def handle_message(message: types.Message):
     if message.chat.type not in ['private']:
         return
     user_id = message.from_user.id
-
+    
+    # Добавляем логирование для отладки
+    logging.info(f"Получено сообщение от {user_id}. Тип: {message.content_type}")
+    logging.info(f"Текущее состояние пользователя: {user_states.get(user_id)}")
+    
     # Список известных команд
     known_commands = [
         '/start', '/prediction', '/hall', '/halllist', '/vote',
