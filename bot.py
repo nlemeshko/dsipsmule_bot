@@ -560,17 +560,41 @@ def handle_message(message: types.Message):
 
     # FSM: если пользователь пишет анонимку
     if user_states.get(user_id) == ANON_STATE:
-        text = message.text.strip()
-        if len(text) > 500:
-            bot.reply_to(message, "Слишком длинно! Пожалуйста, до 500 символов.")
+        if message.photo:
+            # Обработка фотографий
+            photo_id = message.photo[-1].file_id  # Берем последнюю (самую большую) версию фото
+            caption = message.caption or ""
+            anon_text = f"{caption}\n\n#анон" if caption else "#анон"
+            for admin_id in ADMIN_IDS:
+                bot.send_photo(admin_id, photo_id, caption=anon_text)
+            logging.info(f"Анонимная фотография от {user_id} отправлена на модерацию")
+            bot.reply_to(message, "Спасибо! Ваша анонимная фотография отправлена на модерацию.")
+            user_states.pop(user_id, None)
             return
-        anon_text = f"{text}\n\n#анон"
-        for admin_id in ADMIN_IDS:
-            bot.send_message(admin_id, f"Новая анонимка на модерацию:\n\n{anon_text}\n\n")
-        logging.info(f"Анонимка от {user_id} отправлена на модерацию")
-        bot.reply_to(message, "Спасибо! Ваша анонимка отправлена на модерацию.")
-        user_states.pop(user_id, None)
-        return
+        elif message.voice:
+            # Обработка голосовых сообщений
+            voice_id = message.voice.file_id
+            caption = message.caption or ""
+            anon_text = f"{caption}\n\n#анон" if caption else "#анон"
+            for admin_id in ADMIN_IDS:
+                bot.send_voice(admin_id, voice_id, caption=anon_text)
+            logging.info(f"Анонимное голосовое сообщение от {user_id} отправлено на модерацию")
+            bot.reply_to(message, "Спасибо! Ваше анонимное голосовое сообщение отправлено на модерацию.")
+            user_states.pop(user_id, None)
+            return
+        elif message.text:
+            # Обработка текстовых сообщений
+            text = message.text.strip()
+            anon_text = f"{text}\n\n#анон"
+            for admin_id in ADMIN_IDS:
+                bot.send_message(admin_id, f"Новая анонимка на модерацию:\n\n{anon_text}\n\n")
+            logging.info(f"Анонимка от {user_id} отправлена на модерацию")
+            bot.reply_to(message, "Спасибо! Ваша анонимка отправлена на модерацию.")
+            user_states.pop(user_id, None)
+            return
+        else:
+            bot.reply_to(message, "Пожалуйста, отправьте текст, фотографию или голосовое сообщение.")
+            return
     # FSM: если пользователь предлагает песню
     if user_states.get(user_id) == SONG_STATE:
         text = message.text.strip()
