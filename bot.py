@@ -571,7 +571,7 @@ def help_command(message: types.Message):
 def handle_message(message: types.Message):
     # Логирование в самом начале функции для отладки получения всех сообщений
     logging.info(f"[handle_message start] Получено сообщение от {message.from_user.id}. Chat ID: {message.chat.id}. Content Type: {message.content_type}")
-
+    
     if message.chat.type not in ['private']:
         return
     user_id = message.from_user.id
@@ -579,6 +579,14 @@ def handle_message(message: types.Message):
     # Добавляем логирование для отладки
     logging.info(f"Получено сообщение от {user_id}. Тип: {message.content_type}")
     logging.info(f"Текущее состояние пользователя: {user_states.get(user_id)}")
+    
+    # Добавляем логирование текста сообщения и эмодзи
+    if message.text:
+        logging.info(f"Текст сообщения: {message.text}")
+        # Проверяем наличие эмодзи в тексте
+        emoji_list = [char for char in message.text if ord(char) > 127]
+        if emoji_list:
+            logging.info(f"Найдены эмодзи в сообщении: {emoji_list}")
     
     # Список известных команд
     known_commands = [
