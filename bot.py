@@ -670,6 +670,13 @@ def handle_sticker(message: types.Message):
     logging.info(f"Получен стикер с file_id: {sticker_id}, эмодзи: {emoji}")
     bot.reply_to(message, f"File ID стикера: {sticker_id}\nЭмодзи: {emoji}")
 
+@bot.message_handler(content_types=['dice'])
+def handle_dice(message: types.Message):
+    dice_id = message.dice.file_id
+    emoji = message.dice.emoji
+    logging.info(f"Получено анимированное эмодзи (Dice) с file_id: {dice_id}, эмодзи: {emoji}")
+    bot.reply_to(message, f"File ID анимированного эмодзи: {dice_id}\nЭмодзи: {emoji}")
+
     # FSM: если пользователь предлагает песню
     if user_states.get(user_id) == SONG_STATE:
         text = message.text.strip()
