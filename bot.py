@@ -587,7 +587,14 @@ def handle_message(message: types.Message):
         emoji_list = [char for char in message.text if ord(char) > 127]
         if emoji_list:
             logging.info(f"Найдены эмодзи в сообщении: {emoji_list}")
-    
+
+    # Проверяем наличие анимированных эмодзи в entities
+    if message.entities:
+        for entity in message.entities:
+            if entity.type == 'custom_emoji':
+                logging.info(f"Найден кастомный/анимированный эмодзи в entities с file_id: {entity.custom_emoji_id}")
+                bot.reply_to(message, f"File ID кастомного/анимированного эмодзи: {entity.custom_emoji_id}")
+
     # Список известных команд
     known_commands = [
         '/start', '/prediction', '/hall', '/halllist', '/vote',
