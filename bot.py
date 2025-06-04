@@ -507,6 +507,34 @@ def cat_command(message: types.Message):
         logging.error(f"Ошибка при выполнении команды /cat: {e}")
         bot.reply_to(message, f"Произошла ошибка при получении котика: {e}")
 
+@bot.message_handler(commands=['casino'])
+def casino_command(message: types.Message):
+    logging.info(f"Команда /casino от {message.from_user.username or message.from_user.id}")
+    
+    # Список символов для слотов
+    symbols = ['🎰', '🎰', '🎰', '🎰', '🎰']
+    
+    # Генерируем 3 случайных символа
+    result = [random.choice(symbols) for _ in range(3)]
+    
+    # Проверяем выигрыш (все символы одинаковые)
+    if all(x == result[0] for x in result):
+        # 10% шанс на выигрыш
+        if random.random() < 0.1:
+            win_message = (
+                f"{'🎉' * 10}\n"
+                f"ПОЗДРАВЛЯЕМ С ПОБЕДОЙ! 🎊\n"
+                f"Ваши символы: {' '.join(result)}\n"
+                f"{'🎉' * 10}"
+            )
+            bot.reply_to(message, win_message)
+        else:
+            # Если не выпал 10% шанс, меняем один символ
+            result[2] = random.choice([s for s in symbols if s != result[0]])
+            bot.reply_to(message, f"Ваши символы: {' '.join(result)}\n\nПовезет в следующий раз!")
+    else:
+        bot.reply_to(message, f"Ваши символы: {' '.join(result)}\n\nПовезет в следующий раз!")
+
 @bot.message_handler(commands=['help'])
 def help_command(message: types.Message):
     help_text = (
@@ -518,6 +546,7 @@ def help_command(message: types.Message):
         "/random - Получить случайную русскую песню с Last.fm\n"
         "/cat - Получить случайное изображение котика\n"
         "/meme - Получить случайный мем\n"
+        "/casino - Играть в слоты\n"
         "/help - Показать это сообщение помощи\n\n"
         "Также доступны функции через кнопки в главном меню (/start) в общении с @dsipsmule_bot:\n"
         "🕵 Анонимка\n"
@@ -553,7 +582,7 @@ def handle_message(message: types.Message):
     # Список известных команд
     known_commands = [
         '/start', '/prediction', '/hall', '/halllist', '/vote',
-        '/random', '/cat', '/meme', '/help'
+        '/random', '/cat', '/meme', '/help', '/casino'
     ]
 
     # Проверяем, является ли сообщение командой, но не известной
