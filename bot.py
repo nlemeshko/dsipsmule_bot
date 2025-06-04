@@ -511,30 +511,59 @@ def cat_command(message: types.Message):
 def casino_command(message: types.Message):
     logging.info(f"Команда /casino от {message.from_user.username or message.from_user.id}")
     
-    # Список символов для слотов из пакета DMJSlotMachine2
-    symbols = ['🍒', '🍊', '🍋', '🍇', '7️⃣']
+    # Список file_id анимированных эмодзи для слотов
+    symbols_file_ids = [
+        '5915988541644475488',
+        '5913646886819991524',
+        '5915589848420322417',
+        '5915967083987864750',
+        '5915560994830028266'
+    ]
     
-    # Генерируем 3 случайных символа
-    result = [random.choice(symbols) for _ in range(3)]
+    # Генерируем 3 случайных file_id
+    result_file_ids = [random.choice(symbols_file_ids) for _ in range(3)]
     
-    # Сначала отправляем символы
-    bot.reply_to(message, f"🎰 {' '.join(result)} 🎰")
+    # Отправляем анимированные эмодзи по их file_id
+    # Для отправки анимированных эмодзи нужно использовать метод send_animation
+    # Но dice (анимированные эмодзи) можно отправлять напрямую как text, если они есть в стандартном наборе
+    # В данном случае мы используем file_id, поэтому нужно отправлять их как стикеры/анимации.
+    # Telegram API позволяет отправлять dice с помощью sendDice, но там ограниченный набор эмодзи и случайное значение.
+    # Для использования конкретных анимированных эмодзи по file_id, отправляем их как animation.
     
-    # Проверяем выигрыш (все символы одинаковые)
-    if all(x == result[0] for x in result):
+    # Отправляем каждое эмодзи по отдельности, так как send_animation отправляет одно анимацию за раз
+    for file_id in result_file_ids:
+        try:
+            bot.send_animation(message.chat.id, file_id)
+        except Exception as e:
+            logging.error(f"Ошибка при отправке анимированного эмодзи {file_id}: {e}")
+
+    # Проверяем выигрыш (все file_id одинаковые)
+    if all(x == result_file_ids[0] for x in result_file_ids):
         # 10% шанс на выигрыш
         if random.random() < 0.1:
-            win_message = (
-                f"{'🎉' * 10}\n"
-                f"ПОЗДРАВЛЯЕМ С ПОБЕДОЙ! 🎊\n"
-                f"{'🎉' * 10}"
-            )
-            bot.send_message(message.chat.id, win_message)
+            # Отправляем анимированное эмодзи при выигрыше (несколько раз)
+            win_emoji_id = '5208541126583136130' # file_id для эмодзи выигрыша
+            for _ in range(5): # Отправим 5 раз
+                try:
+                    bot.send_animation(message.chat.id, win_emoji_id)
+                except Exception as e:
+                    logging.error(f"Ошибка при отправке выигрышного эмодзи {win_emoji_id}: {e}")
         else:
-            # Если не выпал 10% шанс, отправляем сообщение о проигрыше
-            bot.send_message(message.chat.id, "Повезет в следующий раз!")
+            # Если не выпал 10% шанс, отправляем анимированное эмодзи проигрыша
+            lose_emoji_id = '5235594421206003919' # file_id для эмодзи проигрыша
+            for _ in range(3): # Отправим 3 раза
+                try:
+                    bot.send_animation(message.chat.id, lose_emoji_id)
+                except Exception as e:
+                    logging.error(f"Ошибка при отправке проигрышного эмодзи {lose_emoji_id}: {e}")
     else:
-        bot.send_message(message.chat.id, "Повезет в следующий раз!")
+        # Отправляем анимированное эмодзи проигрыша при несовпадении символов
+        lose_emoji_id = '5235594421206003919' # file_id для эмодзи проигрыша
+        for _ in range(3): # Отправим 3 раза
+            try:
+                bot.send_animation(message.chat.id, lose_emoji_id)
+            except Exception as e:
+                logging.error(f"Ошибка при отправке проигрышного эмодзи {lose_emoji_id}: {e}")
 
 @bot.message_handler(commands=['help'])
 def help_command(message: types.Message):
@@ -587,13 +616,6 @@ def handle_message(message: types.Message):
         emoji_list = [char for char in message.text if ord(char) > 127]
         if emoji_list:
             logging.info(f"Найдены эмодзи в сообщении: {emoji_list}")
-
-    # Проверяем наличие анимированных эмодзи в entities
-    if message.entities:
-        for entity in message.entities:
-            if entity.type == 'custom_emoji':
-                logging.info(f"Найден кастомный/анимированный эмодзи в entities с file_id: {entity.custom_emoji_id}")
-                bot.reply_to(message, f"File ID кастомного/анимированного эмодзи: {entity.custom_emoji_id}")
 
     # Список известных команд
     known_commands = [
@@ -670,85 +692,15 @@ def handle_anon_voice(message: types.Message):
         user_states.pop(user_id, None)
         return
 
-@bot.message_handler(content_types=['sticker'])
-def handle_sticker(message: types.Message):
-    sticker_id = message.sticker.file_id
-    emoji = message.sticker.emoji
-    logging.info(f"Получен стикер с file_id: {sticker_id}, эмодзи: {emoji}")
-    bot.reply_to(message, f"File ID стикера: {sticker_id}\nЭмодзи: {emoji}")
-
 @bot.message_handler(content_types=['dice'])
 def handle_dice(message: types.Message):
-    dice_id = message.dice.file_id
-    emoji = message.dice.emoji
-    logging.info(f"Получено анимированное эмодзи (Dice) с file_id: {dice_id}, эмодзи: {emoji}")
-    bot.reply_to(message, f"File ID анимированного эмодзи: {dice_id}\nЭмодзи: {emoji}")
+    # Удаляем этот обработчик, так как фокусируемся на использовании file_id в команде /casino
+    pass # Placeholder for removal
 
-    # FSM: если пользователь предлагает песню
-    if user_states.get(user_id) == SONG_STATE:
-        text = message.text.strip()
-        if len(text) > 500:
-            bot.reply_to(message, "Слишком длинно! Пожалуйста, до 500 символов.")
-            return
-        user_info = f"@{message.from_user.username}" if message.from_user.username else f"id: {user_id}"
-        for admin_id in ADMIN_IDS:
-            bot.send_message(admin_id, f"Новое предложение песни:\n\n{text}\n\nОт пользователя: {user_info}")
-        logging.info(f"Песня предложена {user_id}")
-        bot.reply_to(message, "Спасибо! Ваше предложение отправлено на рассмотрение.")
-        user_states.pop(user_id, None)
-        return
-    # FSM: если пользователь отправляет ссылку для оценки
-    if user_states.get(user_id) == RATE_LINK_STATE:
-        link = message.text.strip()
-        if not (link.startswith("http://") or link.startswith("https://")):
-            bot.reply_to(message, "Пожалуйста, отправьте корректную ссылку на трек.")
-            return
-        user_info = f"@{message.from_user.username}" if message.from_user.username else f"id: {user_id}"
-        for admin_id in ADMIN_IDS:
-            bot.send_message(admin_id, f"Запрос на оценку исполнения:\n\nСсылка: {link}\n\nОт пользователя: {user_info}")
-        logging.info(f"Оценка трека запрошена {user_id}")
-        bot.reply_to(message, "Спасибо! Ваш запрос на оценку отправлен.")
-        user_states.pop(user_id, None)
-        return
-    # FSM: если пользователь отправляет ссылку для промо
-    if user_states.get(user_id) == PROMOTE_STATE:
-        track_link = message.text.strip()
-
-        # Простая проверка на формат ссылки
-        if not (track_link.startswith("http://") or track_link.startswith("https://")):
-            bot.reply_to(message, "Пожалуйста, отправьте корректную ссылку на трек.")
-            return
-
-        user_info = f"@{message.from_user.username}" if message.from_user.username else f"id: {message.from_user.id}"
-        request_id = str(uuid.uuid4()) # Генерируем уникальный ID запроса
-
-        # Сохраняем данные запроса временно
-        pending_promotions[request_id] = {
-            "user_id": message.from_user.id,
-            "user_info": user_info,
-            "track_link": track_link
-        }
-
-        # Шаблон сообщения для администратора
-        admin_message_text = (
-            f"📢 Новый запрос на промо от {user_info}:\n\n"
-            f"Трек: {track_link}\n\n"
-        )
-        
-        # Отправляем сообщение админам на модерацию (без кнопки)
-        for admin_id in ADMIN_IDS:
-            try:
-                bot.send_message(admin_id, admin_message_text)
-            except Exception as admin_e:
-                logging.error(f"Не удалось отправить сообщение админу {admin_id}: {admin_e}")
-            
-        logging.info(f"Запрос на промо от {user_info} (ID: {request_id}) отправлен на модерацию.")
-        bot.reply_to(message, "Спасибо! Ваш запрос на промо отправлен администраторам на модерацию.")
-        user_states.pop(user_id, None) # Сбрасываем состояние после получения ссылки
-        return # Важно выйти после обработки состояния
-
-    logging.info(f"Сообщение вне сценария от {user_id} в чате {message.chat.id}")
-    bot.reply_to(message, "Я вас слушаю! Используйте команду /start для начала работы.")
+@bot.message_handler(content_types=['sticker'])
+def handle_sticker(message: types.Message):
+    # Удаляем этот обработчик
+    pass # Placeholder for removal
 
 def get_random_vocal_prediction():
     try:
