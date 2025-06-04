@@ -658,8 +658,9 @@ def handle_anon_voice(message: types.Message):
 @bot.message_handler(content_types=['sticker'])
 def handle_sticker(message: types.Message):
     sticker_id = message.sticker.file_id
-    logging.info(f"Получен стикер с file_id: {sticker_id}")
-    bot.reply_to(message, f"File ID стикера: {sticker_id}")
+    emoji = message.sticker.emoji
+    logging.info(f"Получен стикер с file_id: {sticker_id}, эмодзи: {emoji}")
+    bot.reply_to(message, f"File ID стикера: {sticker_id}\nЭмодзи: {emoji}")
 
     # FSM: если пользователь предлагает песню
     if user_states.get(user_id) == SONG_STATE:
