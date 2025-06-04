@@ -511,11 +511,14 @@ def cat_command(message: types.Message):
 def casino_command(message: types.Message):
     logging.info(f"Команда /casino от {message.from_user.username or message.from_user.id}")
     
-    # Список символов для слотов
-    symbols = ['🎰', '🎰', '🎰', '🎰', '🎰']
+    # Список символов для слотов из пакета DMJSlotMachine2
+    symbols = ['🍒', '🍊', '🍋', '🍇', '7️⃣']
     
     # Генерируем 3 случайных символа
     result = [random.choice(symbols) for _ in range(3)]
+    
+    # Сначала отправляем символы
+    bot.reply_to(message, f"🎰 {' '.join(result)} 🎰")
     
     # Проверяем выигрыш (все символы одинаковые)
     if all(x == result[0] for x in result):
@@ -524,16 +527,14 @@ def casino_command(message: types.Message):
             win_message = (
                 f"{'🎉' * 10}\n"
                 f"ПОЗДРАВЛЯЕМ С ПОБЕДОЙ! 🎊\n"
-                f"Ваши символы: {' '.join(result)}\n"
                 f"{'🎉' * 10}"
             )
-            bot.reply_to(message, win_message)
+            bot.send_message(message.chat.id, win_message)
         else:
-            # Если не выпал 10% шанс, меняем один символ
-            result[2] = random.choice([s for s in symbols if s != result[0]])
-            bot.reply_to(message, f"Ваши символы: {' '.join(result)}\n\nПовезет в следующий раз!")
+            # Если не выпал 10% шанс, отправляем сообщение о проигрыше
+            bot.send_message(message.chat.id, "Повезет в следующий раз!")
     else:
-        bot.reply_to(message, f"Ваши символы: {' '.join(result)}\n\nПовезет в следующий раз!")
+        bot.send_message(message.chat.id, "Повезет в следующий раз!")
 
 @bot.message_handler(commands=['help'])
 def help_command(message: types.Message):
