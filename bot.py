@@ -654,8 +654,12 @@ def handle_anon_voice(message: types.Message):
             bot.reply_to(message, "Произошла ошибка при отправке голосового сообщения. Попробуйте еще раз.")
         user_states.pop(user_id, None)
         return
-    # else: # Если не в ANON_STATE, позволяем сообщению пройти к другим обработчикам голоса
-    #     pass
+
+@bot.message_handler(content_types=['sticker'])
+def handle_sticker(message: types.Message):
+    sticker_id = message.sticker.file_id
+    logging.info(f"Получен стикер с file_id: {sticker_id}")
+    bot.reply_to(message, f"File ID стикера: {sticker_id}")
 
     # FSM: если пользователь предлагает песню
     if user_states.get(user_id) == SONG_STATE:
