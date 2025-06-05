@@ -693,6 +693,12 @@ def handle_message(message: types.Message):
         game = pole_games[user_id]
         guess = message.text.lower().strip()
         
+        # Отправляем сообщение о том, что бот думает
+        thinking_msg = bot.reply_to(message, "🤔 Думаю...")
+        
+        # Ждем 5 секунд
+        time.sleep(5)
+        
         # Если пользователь пытается угадать слово целиком
         if len(guess) > 1:
             if guess == game['word']:
@@ -744,6 +750,10 @@ def handle_message(message: types.Message):
             # Отправляем случайное голосовое сообщение неверного ответа
             send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
         
+        # Удаляем сообщение "Думаю..."
+        bot.delete_message(message.chat.id, thinking_msg.message_id)
+        
+        # Отправляем ответ
         bot.reply_to(message, response, parse_mode='HTML')
         return
 
