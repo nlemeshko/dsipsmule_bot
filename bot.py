@@ -712,14 +712,22 @@ async def pole_command(message: types.Message):
     # Отправляем случайное голосовое сообщение ожидания
     await send_random_voice(bot, message.chat.id, 'pole', 'wait', 3)
 
-@bot.message_handler(content_types=['text', 'caption'])
+@bot.message_handler(content_types=['text', 'caption'], func=lambda message: message.text and not message.text.startswith('/'))
 async def handle_message(message: types.Message):
     # Логирование в самом начале функции для отладки получения всех сообщений
     logging.info(f"[handle_message start] Получено сообщение от {message.from_user.id}. Chat ID: {message.chat.id}. Content Type: {message.content_type}")
     
+    # Явная проверка: если сообщение является командой, пропускаем его обработку в handle_message
+    if message.text and message.text.startswith('/'):
+        logging.info(f"Сообщение от {message.from_user.id} является командой: {message.text}. Пропускаем handle_message.")
+        return
+
     user_id = message.from_user.id
+    is_private_chat = message.chat.type == 'private'
     
-    # Проверяем, играет ли пользователь в "Поле чудес"
+    # Проверяем, играет ли пользователь в "Поле чудес" И сообщение является либо:
+    # 1. ответом на сообщение бота в игре (в группе)
+    # 2. текстовым сообщением в личном чате (только если пользователь в игре Pole)
     if user_id in pole_games:
         game = pole_games[user_id]
         
@@ -727,23 +735,14 @@ async def handle_message(message: types.Message):
         if message.chat.id != game['chat_id']:
             logging.info(f"Сообщение от игрока {user_id} в другом чате ({message.chat.id}) во время игры в чате {game['chat_id']}. Игнорируем в контексте игры.")
             return # Игнорируем сообщение, если оно не из чата игры
-        
-        guess = None
-        is_private_chat = message.chat.type == 'private'
 
-        # --- Логика для личных чатов (цитирование не требуется) ---
-        if is_private_chat:
-            guess = message.text.lower().strip() if message.text else '' # Берем текст сообщения напрямую
-            logging.info(f"Личный чат. Получено сообщение для Поле чудес: {guess}")
+        is_reply_to_bot_game_message = message.reply_to_message and game.get('bot_message_ids') and message.reply_to_message.message_id in game['bot_message_ids']
 
-        # --- Логика для групповых чатов (цитирование обязательно) ---
-        # Проверяем, является ли сообщение ответом на одно из сообщений бота в текущей игре
-        elif message.reply_to_message and game.get('bot_message_ids') and message.reply_to_message.message_id in game['bot_message_ids']:
-            guess = message.text.lower().strip() if message.text else '' # Берем текст из цитирующего сообщения
-            logging.info(f"Групповой чат. Получена цитата для Поле чудес: {guess}")
+        # Обрабатываем как ход в игре только если это ответ в группе ИЛИ прямое текстовое сообщение в личном чате
+        if (not is_private_chat and is_reply_to_bot_game_message) or (is_private_chat and message.text):
+            guess = message.text.lower().strip() if message.text else '' # Берем текст из цитирующего сообщения или прямо из сообщения в ЛС
+            logging.info(f"Обрабатываем как ход в Поле чудес. Цитата в группе: {not is_private_chat}, Сообщение в ЛС: {is_private_chat}. Угадывание: {guess}")
 
-        # Если guess был получен (либо из личного чата, либо из цитаты в группе)
-        if guess is not None:
             # Если guess пустой после обрезки (например, пустая цитата или сообщение только с пробелами)
             if not guess:
                 response = "Пожалуйста, введите букву или слово для угадывания." + (" в цитируемом сообщении." if not is_private_chat else "")
@@ -754,8 +753,8 @@ async def handle_message(message: types.Message):
             thinking_msg = await bot.reply_to(message, "🤔 Думаю...")
             game['bot_message_ids'].append(thinking_msg.message_id) # Добавляем ID сообщения "Думаю..."
             
-            # Ждем 5 секунд
-            time.sleep(5)
+            # Добавляем небольшую задержку для имитации "раздумий"
+            await asyncio.sleep(1)
             
             # Если пользователь пытается угадать слово целиком
             if len(guess) > 1:
@@ -769,6 +768,7 @@ async def handle_message(message: types.Message):
                     try:
                         with open('pole/win.mp3', 'rb') as voice:
                             await bot.send_voice(message.chat.id, voice)
+                        # Не добавляем ID победного сообщения в bot_message_ids, так как игра окончена
                         logging.info("Отправлено голосовое сообщение победы: pole/win.mp3")
                     except Exception as e:
                         logging.error(f"Ошибка при отправке голосового сообщения победы: {e}")
@@ -789,10 +789,12 @@ async def handle_message(message: types.Message):
                         game['guessed_letters'].add(guess)
                         response = "✅ Верно! Буква есть в слове." + (" Цитатой." if not is_private_chat else "")
                         # Отправляем случайное голосовое сообщение верного ответа
+                        # ID голосовых сообщений не добавляем в bot_message_ids, т.к. их не цитируют для хода
                         await send_random_voice(bot, message.chat.id, 'pole', 'yes', 3)
                     else:
                         response = "❌ Неверно! Такой буквы нет в слове." + (" Цитатой." if not is_private_chat else "")
                         # Отправляем случайное голосовое сообщение неверного ответа
+                        # ID голосовых сообщений не добавляем в bot_message_ids, т.k. их не цитируют для хода
                         await send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
                     
                     # Проверяем, угадано ли всё слово
@@ -806,6 +808,7 @@ async def handle_message(message: types.Message):
                         try:
                             with open('pole/win.mp3', 'rb') as voice:
                                 await bot.send_voice(message.chat.id, voice)
+                            # Не добавляем ID победного сообщения в bot_message_ids, так как игра окончена
                             logging.info("Отправлено голосовое сообщение победы: pole/win.mp3")
                         except Exception as e:
                             logging.error(f"Ошибка при отправке голосового сообщения победы: {e}")
@@ -826,34 +829,7 @@ async def handle_message(message: types.Message):
             # Отправляем ответ
             response_message = await bot.reply_to(message, response, parse_mode='HTML')
             game['bot_message_ids'].append(response_message.message_id) # Добавляем ID ответного сообщения
-            return
-
-        # Если это не цитата одного из сообщений бота в игре, игнорируем
-        logging.info("Сообщение не является цитатой одного из сообщений бота в игре. Игнорируем в контексте игры.")
-        return
-
-    # Добавляем логирование для отладки
-    logging.info(f"Получено сообщение от {user_id}. Тип: {message.content_type}")
-    logging.info(f"Текущее состояние пользователя: {user_states.get(user_id)}")
-    
-    # Добавляем логирование текста сообщения и эмодзи
-    if message.text:
-        logging.info(f"Текст сообщения: {message.text}")
-        # Проверяем наличие эмодзи в тексте
-        emoji_list = [char for char in message.text if ord(char) > 127]
-        if emoji_list:
-            logging.info(f"Найдены эмодзи в сообщении: {emoji_list}")
-
-    # Список известных команд
-    known_commands = [
-        '/start', '/prediction', '/hall', '/halllist', '/vote',
-        '/random', '/cat', '/meme', '/help', '/casino', '/pole', '/ask'
-    ]
-
-    # Если сообщение является известной командой, позволяем обработчику команды выполнить свою логику
-    if message.text and message.text.split()[0].lower() in known_commands:
-        logging.info(f"Сообщение является известной командой: {message.text.split()[0].lower()}. Позволяем обработчику команды работать.")
-        return # Выходим из handle_message, чтобы обработчик команды мог работать
+            return # Возвращаемся после обработки хода в игре
 
     # FSM: если пользователь пишет анонимку
     if user_states.get(user_id) == ANON_STATE:
@@ -936,6 +912,15 @@ async def handle_message(message: types.Message):
             await bot.reply_to(message, "Пожалуйста, отправьте ссылку на трек для промо.")
             return
 
+    # Если сообщение не является командой и не соответствует FSM состояниям,
+    # но связано с игрой Pole Chudes (как ответ или в ЛС),
+    # то оно уже было обработано выше.
+    # Если сообщение не является командой, не связано с игрой Pole Chudes, и не соответствует FSM состояниям,
+    # то это обычное текстовое/caption сообщение, которое можно проигнорировать или обработать как-то иначе.
+    logging.info(f"Сообщение от {user_id} не является командой, не связано с игрой Pole Chudes, и не соответствует FSM состоянию. Игнорируем.")
+    # Можно добавить здесь обработку других типов сообщений, если нужно.
+    return
+
 @bot.message_handler(content_types=['photo'])
 async def handle_anon_photo(message: types.Message):
     user_id = message.from_user.id
@@ -1003,6 +988,8 @@ async def ask_command(message: types.Message):
     user_id = message.from_user.id
     now = time.time()
 
+    logging.info(f"[ask_command start] Вызвана команда /ask пользователем {user_id} в чате {message.chat.id}")
+
     # Проверяем ограничение на частоту запросов для /ask (10 секунд)
     if user_id in last_ask_time and now - last_ask_time[user_id] < 10:
         remaining_time = int(10 - (now - last_ask_time[user_id]))
@@ -1027,30 +1014,46 @@ async def ask_command(message: types.Message):
     client = None # Инициализируем client перед try
     try:
         logging.info("Начинаем подключение к CharacterAI...")
+        # Создание клиента CharacterAI
         client = await get_client(token=CHARACTER_AI_TOKEN)
-        logging.info("Клиент CharacterAI создан")
+        logging.info("Клиент CharacterAI создан успешно.")
 
         try:
-            logging.info(f"Создаем чат с персонажем ID: {CHARACTER_ID}")
+            logging.info(f"Создаем чат с персонажем ID: {CHARACTER_ID}...")
             # Метод create_chat возвращает кортеж: (Chat object, Turn object)
+            # Первый элемент кортежа - это Chat object
             chat_response_tuple = await client.chat.create_chat(CHARACTER_ID)
-            chat_object = chat_response_tuple[0]
+            chat_object = chat_response_tuple[0] # This is a Chat object
+            
+            # *** ИСПРАВЛЕНИЕ ОШИБКИ: 'Chat' object has no attribute 'chat' ***
+            # Ошибка возникала здесь, потому что мы пытались получить доступ к chat_id через chat_object.chat.id
+            # Правильный способ получить ID чата из Chat object - это использовать атрибут .id напрямую
+            chat_id = chat_object.chat_id 
+            # ****************************************************************
+            
+            logging.info(f"Чат с персонажем {CHARACTER_ID} создан. Chat ID: {chat_id}")
 
-            logging.info("Отправляем сообщение в чат...")
+            logging.info(f"Отправляем сообщение в чат {chat_id} с вопросом: {question}...")
             # Вызываем send_message на client.chat и передаем необходимые аргументы
-            response = await client.chat.send_message(CHARACTER_ID, chat_object.chat.id, question)
+            # Этот вызов возвращает Turn object
+            response = await client.chat.send_message(CHARACTER_ID, chat_id, question)
+            logging.info(f"Сообщение отправлено. Получен ответ от CharacterAI.")
+            
+            # turn_id и primary_candidate_id получаем напрямую из объекта Turn (response)
+            turn_id = response.turn_id
+            primary_candidate_id = response.primary_candidate_id
             reply = response.get_primary_candidate().text
-            logging.info(f"CharacterAI: Получен ответ: {reply}")
+            logging.info(f"CharacterAI: Получен текстовый ответ: {reply}")
 
-            logging.info(f"Генерируем голосовой ответ для chat_id: {response.chat.id}, turn_id: {response.turn_id}, primary_candidate_id: {response.primary_candidate_id}, voice_id: {CHARACTER_VOICE_ID}")
-            # Используем переменную client, созданную выше
-            speech = await client.utils.generate_speech(response.chat.id, response.turn_id, response.primary_candidate_id, CHARACTER_VOICE_ID)
-            logging.info("Голосовой ответ сгенерирован.")
+            logging.info(f"Генерируем голосовой ответ для chat_id: {chat_id}, turn_id: {turn_id}, primary_candidate_id: {primary_candidate_id}, voice_id: {CHARACTER_VOICE_ID}...")
+            # Используем переменную client, созданную выше, и корректные ID
+            speech = await client.utils.generate_speech(chat_id, turn_id, primary_candidate_id, CHARACTER_VOICE_ID)
+            logging.info("Голосовой ответ сгенерирован успешно.")
 
             # Отправляем голосовое сообщение пользователю
             logging.info("Отправляем голосовое сообщение пользователю...")
             await bot.send_voice(message.chat.id, speech)
-            logging.info("Голосовое сообщение отправлено.")
+            logging.info("Голосовое сообщение отправлено успешно.")
 
             # Отправляем изображение ask.png
             image_path = 'ask.png'
@@ -1065,7 +1068,7 @@ async def ask_command(message: types.Message):
                 logging.warning(f"Файл картинки {image_path} не найден для команды /ask.")
 
         except Exception as e:
-            logging.error(f"Ошибка при работе с CharacterAI: {str(e)}")
+            logging.error(f"[CharacterAI Interaction Error] Ошибка при работе с CharacterAI: {str(e)}")
             logging.error(f"Traceback: {traceback.format_exc()}")
             # Попробуем удалить "Думаю...", если оно еще не удалено
             try:
@@ -1080,7 +1083,7 @@ async def ask_command(message: types.Message):
                 await client.close_session()
 
     except Exception as e:
-        logging.error(f"Ошибка при создании клиента CharacterAI: {str(e)}")
+        logging.error(f"[CharacterAI Client Error] Ошибка при создании клиента CharacterAI: {str(e)}")
         logging.error(f"Traceback: {traceback.format_exc()}")
         await bot.delete_message(message.chat.id, thinking_msg.message_id)
         await bot.reply_to(message, f"Произошла ошибка при подключении к CharacterAI: {str(e)}")
