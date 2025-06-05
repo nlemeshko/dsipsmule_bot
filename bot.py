@@ -533,7 +533,8 @@ def casino_command(message: types.Message):
     # Отправляем каждое эмодзи по отдельности, так как send_animation отправляет одно анимацию за раз
     for file_id in result_file_ids:
         try:
-            bot.send_animation(message.chat.id, file_id)
+            # bot.send_animation(message.chat.id, file_id)
+            bot.send_sticker(message.chat.id, file_id)
         except Exception as e:
             logging.error(f"Ошибка при отправке анимированного эмодзи {file_id}: {e}")
 
@@ -545,7 +546,8 @@ def casino_command(message: types.Message):
             win_emoji_id = '5208541126583136130' # file_id для эмодзи выигрыша
             for _ in range(5): # Отправим 5 раз
                 try:
-                    bot.send_animation(message.chat.id, win_emoji_id)
+                    # bot.send_animation(message.chat.id, win_emoji_id)
+                    bot.send_sticker(message.chat.id, win_emoji_id)
                 except Exception as e:
                     logging.error(f"Ошибка при отправке выигрышного эмодзи {win_emoji_id}: {e}")
         else:
@@ -553,7 +555,8 @@ def casino_command(message: types.Message):
             lose_emoji_id = '5235594421206003919' # file_id для эмодзи проигрыша
             for _ in range(3): # Отправим 3 раза
                 try:
-                    bot.send_animation(message.chat.id, lose_emoji_id)
+                    # bot.send_animation(message.chat.id, lose_emoji_id)
+                    bot.send_sticker(message.chat.id, lose_emoji_id)
                 except Exception as e:
                     logging.error(f"Ошибка при отправке проигрышного эмодзи {lose_emoji_id}: {e}")
     else:
@@ -561,7 +564,8 @@ def casino_command(message: types.Message):
         lose_emoji_id = '5235594421206003919' # file_id для эмодзи проигрыша
         for _ in range(3): # Отправим 3 раза
             try:
-                bot.send_animation(message.chat.id, lose_emoji_id)
+                # bot.send_animation(message.chat.id, lose_emoji_id)
+                bot.send_sticker(message.chat.id, lose_emoji_id)
             except Exception as e:
                 logging.error(f"Ошибка при отправке проигрышного эмодзи {lose_emoji_id}: {e}")
 
