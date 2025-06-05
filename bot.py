@@ -1222,37 +1222,39 @@ async def ask_command(message: types.Message):
 @bot.message_handler(commands=['proof'])
 async def proof_command(message: types.Message):
     logging.info(f"Command /proof received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
-    # logging.info(f"Proof command received. Reply message: {message.reply_to_message}")
+    
     if not message.reply_to_message:
-        await bot.reply_to(message, "Пожалуйста, ответьте на сообщение командой /proof, чтобы я мог оценить его.")
+        await bot.reply_to(message, "Эта команда работает только в ответ на сообщение!")
         return
-
-    # Получаем текст цитируемого сообщения
-    quoted_text = message.reply_to_message.text or message.reply_to_message.caption
-    if not quoted_text:
-        await bot.reply_to(message, "Я могу оценить только текстовые сообщения.")
+    
+    # Получаем текст сообщения, на которое отвечаем
+    replied_text = message.reply_to_message.text or message.reply_to_message.caption or ""
+    
+    if not replied_text:
+        await bot.reply_to(message, "Я могу оценить только текстовые сообщения!")
         return
-
-    # Генерируем случайный ответ
-    response_type = random.choices(
-        ['agree', 'disagree', 'unsure'],
-        weights=[10, 10, 5],  # 10 вариантов согласия, 10 несогласия, 5 неуверенности
-        k=1
-    )[0]
-
-    if response_type == 'agree':
-        response = random.choice(proof_agree_responses)
-    elif response_type == 'disagree':
-        response = random.choice(proof_disagree_responses)
-    else:
-        response = random.choice(proof_unsure_responses)
-
-    # Отправляем ответ бота как ответ на оригинальное процитированное сообщение
-    await bot.send_message(
-        chat_id=message.chat.id,
-        text=response,
-        reply_to_message_id=message.reply_to_message.message_id
-    )
+    
+    # Выбираем случайный ответ
+    response = random.choice(proof_agree_responses + proof_disagree_responses + proof_unsure_responses)
+    
+    # Отправляем изображение и текст как ответ на исходное сообщение
+    try:
+        image_path = 'proof.png'
+        if os.path.exists(image_path):
+            with open(image_path, 'rb') as photo:
+                await bot.send_photo(
+                    message.chat.id,
+                    photo,
+                    caption=response,
+                    reply_to_message_id=message.reply_to_message.message_id
+                )
+            logging.info(f"Картинка {image_path} отправлена с ответом для команды /proof")
+        else:
+            logging.warning(f"Файл картинки {image_path} не найден для команды /proof. Отправляю только текст.")
+            await bot.reply_to(message.reply_to_message, response)
+    except Exception as e:
+        logging.error(f"Ошибка при отправке картинки в команде /proof: {e}")
+        await bot.reply_to(message.reply_to_message, response)
 
 @bot.message_handler(commands=['roast'])
 async def roast_command(message: types.Message):
