@@ -1249,22 +1249,20 @@ async def ask_command(message: types.Message):
 async def proof_command(message: types.Message):
     logging.info(f"Command /proof received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
     
-    if not message.reply_to_message:
-        await bot.reply_to(message, "Эта команда работает только в ответ на сообщение!")
-        return
-    
+    # Определяем message_id, на которое будет отвечать бот
+    # Если это ответ на другое сообщение, отвечаем на него
+    # Иначе (если команда пришла без ответа), отвечаем на само сообщение с командой
+    reply_to_message_id = message.reply_to_message.message_id if message.reply_to_message else message.message_id
+
     # Получаем текст сообщения, на которое отвечаем (теперь не обязательно для работы команды)
-    replied_text = message.reply_to_message.text or message.reply_to_message.caption or ""
+    replied_text = message.reply_to_message.text or message.reply_to_message.caption or "" if message.reply_to_message else ""
     
-    # Убираем проверку на наличие текста в отвеченном сообщении
-    # if not replied_text:
-    #     await bot.reply_to(message, "Я могу оценить только текстовые сообщения!")
-    #     return
+    # Мы уже убрали проверку на наличие текста в отвеченном сообщении в предыдущем шаге
     
     # Выбираем случайный ответ
-    response = random.choice(proof_agree_responses + proof_disagree_responses + proof_unsure_responses)
-    
-    # Отправляем изображение и текст как ответ на исходное сообщение
+    response = random.choice(proof_agree_responses + proof_disagree_responses + proof_unsure_responses).format(user_nick=message.from_user.first_name or message.from_user.username or "дорогой друг") # Добавляем fallback для ника
+
+    # Отправляем изображение и текст как ответ на соответствующее сообщение
     try:
         image_path = 'images/proof.png'
         if os.path.exists(image_path):
@@ -1273,15 +1271,15 @@ async def proof_command(message: types.Message):
                     message.chat.id,
                     photo,
                     caption=response,
-                    reply_to_message_id=message.message_id # Изменено на message.message_id
+                    reply_to_message_id=reply_to_message_id # Используем определенный reply_to_message_id
                 )
-            logging.info(f"Картинка {image_path} отправлена с ответом для команды /proof как ответ на сообщение команды.")
+            logging.info(f"Картинка {image_path} отправлена с ответом для команды /proof с reply_to_message_id={reply_to_message_id}.")
         else:
             logging.warning(f"Файл картинки {image_path} не найден для команды /proof. Отправляю только текст как ответ.")
-            await bot.reply_to(message, response) # Изменено на reply_to(message, ...)
+            await bot.send_message(message.chat.id, response, reply_to_message_id=reply_to_message_id) # Используем определенный reply_to_message_id
     except Exception as e:
         logging.error(f"Ошибка при отправке картинки в команде /proof: {e}")
-        await bot.reply_to(message, response) # Изменено на reply_to(message, ...)
+        await bot.send_message(message.chat.id, response, reply_to_message_id=reply_to_message_id) # Используем определенный reply_to_message_id
 
 @bot.message_handler(commands=['roast'])
 async def roast_command(message: types.Message):
