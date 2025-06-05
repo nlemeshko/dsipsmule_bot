@@ -566,7 +566,7 @@ async def casino_command(message: types.Message):
     now = time.time()
 
     # Проверяем ограничение на частоту запросов для /casino
-    if user_id in last_casino_time and now - last_casino_time[user_id] < 60:
+    if user_id in last_casino_time and now - last_casino_time[user_id] < 10:
         remaining_time = int(60 - (now - last_casino_time[user_id]))
         await bot.reply_to(message, f"⏳ Подождите {remaining_time} секунд перед следующим запуском казино.")
         return
