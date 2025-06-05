@@ -510,107 +510,54 @@ def cat_command(message: types.Message):
 @bot.message_handler(commands=['casino'])
 def casino_command(message: types.Message):
     logging.info(f"Команда /casino от {message.from_user.username or message.from_user.id}")
-    
-    # Список file_id анимированных эмодзи для слотов
-    symbols_file_ids = [
-        '5915988541644475488',
-        '5913646886819991524',
-        '5915589848420322417',
-        '5915967083987864750',
-        '5915560994830028266'
-    ]
-    
-    # Генерируем 3 случайных file_id
-    result_file_ids = [random.choice(symbols_file_ids) for _ in range(3)]
-    
-    # Формируем текстовое сообщение с местозаполнителями для эмодзи
-    text_result = " ".join(["\U00002063"] * 3) # Используем U+2063 Invisible Separator как местозаполнитель
-    entities = []
-    current_offset = 0
-    for file_id in result_file_ids:
-        entities.append(types.MessageEntity(
-            type='custom_emoji',
-            offset=current_offset,
-            length=1, # Кастомные эмодзи занимают одну кодовую точку в строке
-            custom_emoji_id=file_id
-        ))
-        current_offset += 2 # Переходим к следующему местозаполнителю (эмодзи + пробел)
-    
-    try:
-        bot.send_message(message.chat.id, text_result, entities=entities)
-    except Exception as e:
-        logging.error(f"Ошибка при отправке результата казино с эмодзи: {e}")
 
-    # Проверяем выигрыш (все file_id одинаковые)
-    if all(x == result_file_ids[0] for x in result_file_ids):
+    # Список стандартных символов для слотов (теперь все эмодзи)
+    symbols = [
+        '🤞', # Эмодзи цифры 7
+        '✌️', # Эмодзи Squared B (визуально похоже на BAR)
+        '🫰',
+        '🤟'
+    ]
+
+    # Генерируем 3 случайных символа
+    result_symbols = [random.choice(symbols) for _ in range(3)]
+
+    # Формируем строку с результатом
+    result_text = " | ".join(result_symbols)
+
+    try:
+        # Отправляем результат слотов
+        bot.send_message(message.chat.id, result_text)
+    except Exception as e:
+        logging.error(f"Ошибка при отправке результата казино: {e}")
+
+    # Проверяем выигрыш (все символы одинаковые)
+    if all(x == result_symbols[0] for x in result_symbols):
         # 10% шанс на выигрыш
         if random.random() < 0.1:
-            # Отправляем анимированное эмодзи при выигрыше (несколько раз) как кастомные эмодзи в тексте
-            win_emoji_id = '5208541126583136130' # file_id для эмодзи выигрыша
-            win_text = " ".join(["\U00002063"] * 5) # 5 эмодзи выигрыша
-            win_entities = []
-            current_offset = 0
-            for _ in range(5):
-                 win_entities.append(types.MessageEntity(
-                    type='custom_emoji',
-                    offset=current_offset,
-                    length=1,
-                    custom_emoji_id=win_emoji_id
-                ))
-                 current_offset += 2
-
+            # Отправляем эмодзи при выигрыше
+            win_emoji = '🎉' # Эмодзи хлопушки
             try:
-                 bot.send_message(message.chat.id, win_text, entities=win_entities)
-                 win_message_text = (
-                     f"{'🎉' * 10}\n"
-                     f"ПОЗДРАВЛЯЕМ С ПОБЕДОЙ! 🎊\n"
-                     f"{'🎉' * 10}"
-                 )
-                 bot.send_message(message.chat.id, win_message_text)
+                bot.send_message(message.chat.id, win_emoji * 5) # Отправим несколько для наглядности
+                bot.send_message(message.chat.id, "ПОЗДРАВЛЯЕМ С ПОБЕДОЙ! 👏")
             except Exception as e:
-                 logging.error(f"Ошибка при отправке выигрышных эмодзи в тексте: {e}")
-
+                logging.error(f"Ошибка при отправке выигрышных эмодзи: {e}")
         else:
-            # Если не выпал 10% шанс, отправляем анимированное эмодзи проигрыша как кастомные эмодзи в тексте
-            lose_emoji_id = '5235594421206003919' # file_id для эмодзи проигрыша
-            lose_text = " ".join(["\U00002063"] * 3) # 3 эмодзи проигрыша
-            lose_entities = []
-            current_offset = 0
-            for _ in range(3):
-                 lose_entities.append(types.MessageEntity(
-                    type='custom_emoji',
-                    offset=current_offset,
-                    length=1,
-                    custom_emoji_id=lose_emoji_id
-                ))
-                 current_offset += 2
-
+            # Если не выпал 10% шанс, отправляем эмодзи проигрыша
+            lose_emoji = '😢' # Эмодзи печального лица
             try:
-                 bot.send_message(message.chat.id, lose_text, entities=lose_entities)
-                 bot.send_message(message.chat.id, "Повезет в следующий раз!")
+                bot.send_message(message.chat.id, lose_emoji * 3) # Отправим несколько
+                bot.send_message(message.chat.id, "Повезет в следующий раз!")
             except Exception as e:
-                 logging.error(f"Ошибка при отправке проигрышных эмодзи в тексте: {e}")
-
+                logging.error(f"Ошибка при отправке проигрышных эмодзи: {e}")
     else:
-        # Отправляем анимированное эмодзи проигрыша при несовпадении символов как кастомные эмодзи в тексте
-        lose_emoji_id = '5235594421206003919' # file_id для эмодзи проигрыша
-        lose_text = " ".join(["\U00002063"] * 3) # 3 эмодзи проигрыша
-        lose_entities = []
-        current_offset = 0
-        for _ in range(3):
-             lose_entities.append(types.MessageEntity(
-                type='custom_emoji',
-                offset=current_offset,
-                length=1,
-                custom_emoji_id=lose_emoji_id
-            ))
-             current_offset += 2
-
+        # Отправляем эмодзи проигрыша при несовпадении символов
+        lose_emoji = '😢' # Эмодзи печального лица
         try:
-            bot.send_message(message.chat.id, lose_text, entities=lose_entities)
+            bot.send_message(message.chat.id, lose_emoji * 3) # Отправим несколько
             bot.send_message(message.chat.id, "Повезет в следующий раз!")
         except Exception as e:
-            logging.error(f"Ошибка при отправке проигрышных эмодзи в тексте: {e}")
+            logging.error(f"Ошибка при отправке проигрышных эмодзи: {e}")
 
 @bot.message_handler(commands=['help'])
 def help_command(message: types.Message):
