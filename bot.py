@@ -68,11 +68,121 @@ pole_words = [
     "крыша", "окно", "дверь", "стена", "пол", "потолок", "лестница", "балкон",
     "подъезд", "лифт", "квартира", "дом", "дача", "гараж", "сарай", "баня",
     "бассейн", "спортзал", "кухня", "ванная", "спальня", "гостиная", "коридор",
-    "кладовка", "чердак", "подвал", "фундамент", "крыльцо", "терраса", "веранда"
+    "кладовка", "чердак", "подвал", "фундамент", "крыльцо", "терраса", "веранда",
+    "ананас", "банан", "виноград", "груша", "дыня", "ежевика", "жасмин", "земляника", "имбирь", "йогурт",
+    "киви", "лимон", "манго", "нектарин", "огурец", "перец", "редис", "слива", "тыква", "укроп",
+    "фенхель", "хурма", "цукини", "черешня", "шпинат", "щавель", "эстрагон", "юкка", "яблоко", "абрикос",
+    "баклажан", "ваниль", "гранат", "дуриан", "ежевика", "женьшень", "зеленый", "ирга", "йогурт", "кокос",
+    "лайм", "мандарин", "нут", "оливка", "петрушка", "ревень", "сельдерей", "тимьян", "устрица", "финик",
+    "хрен", "цикорий", "чеснок", "шалфей", "щавель", "эхинацея", "юкка", "ягода", "айва", "брокколи",
+    "васаби", "грейпфрут", "дыня", "ежевика", "жасмин", "земляника", "имбирь", "йогурт", "киви", "лимон",
+    "манго", "нектарин", "огурец", "перец", "редис", "слива", "тыква", "укроп", "фенхель", "хурма",
+    "цукини", "черешня", "шпинат", "щавель", "эстрагон", "юкка", "яблоко", "абрикос", "баклажан", "ваниль",
+    "гранат", "дуриан", "ежевика", "женьшень", "зеленый", "ирга", "йогурт", "кокос", "лайм", "мандарин",
+    "нут", "оливка", "петрушка", "ревень", "сельдерей", "тимьян", "устрица", "финик", "хрен", "цикорий",
+    "чеснок", "шалфей", "щавель", "эхинацея", "юкка", "ягода", "айва", "брокколи", "васаби", "грейпфрут"
 ]
 
 # Получение Client-ID Imgur из переменных окружения
 IMGUR_CLIENT_ID = os.getenv('IMGUR_CLIENT_ID')
+
+# Список ответов для команды /proof
+proof_agree_responses = [
+    "Ооо, наконец-то кто-то сказал что-то умное! Полностью согласен!",
+    "Бро, ты гений! Это именно то, что я хотел сказать!",
+    "Да ты что, это же очевидно! Конечно согласен!",
+    "Наконец-то кто-то додумался до этого! Подписываюсь под каждым словом!",
+    "О, смотрите кто у нас тут умный! И правда, согласен на все 100%!",
+    "Вау, ты читаешь мои мысли? Абсолютно верно!",
+    "Да ты что, это же элементарно! Конечно согласен!",
+    "Ооо, кто-то тут умный! Полностью поддерживаю!",
+    "Наконец-то кто-то сказал правду! Согласен на все 200%!",
+    "Бро, ты прям в точку! Это именно то, что я думал!"
+]
+
+proof_disagree_responses = [
+    "Бро, ты что, с луны свалился? Это же полная чушь!",
+    "Ооо, кто-то тут пересмотрел сериалов! Не верю ни единому слову!",
+    "Да ты что, это же как дважды два - пять! Полный бред!",
+    "Ой, кто-то тут перегрелся на солнце! Это не так работает!",
+    "Бро, может тебе отдохнуть? Это же полная ерунда!",
+    "Ооо, смотрите кто у нас тут фантазёр! Не верю ни капли!",
+    "Да ты что, это же как квадратное яйцо! Полный абсурд!",
+    "Ой, кто-то тут переел сладкого! Это не имеет смысла!",
+    "Бро, может тебе выспаться? Это же полная чушь!",
+    "Ооо, кто-то тут переиграл в игры! Это нереально!"
+]
+
+proof_unsure_responses = [
+    "Хмм... Может ты прав, а может и нет. Кто его знает?",
+    "Ооо, сложный вопрос! Может быть да, а может быть нет...",
+    "Бро, ты меня в тупик поставил! Нужно подумать...",
+    "Хмм... Интересная мысль, но я не уверен. Может быть...",
+    "Ой, кто-то тут задал сложный вопрос! Давай подумаем вместе..."
+]
+
+# Список ответов для команды /roast
+roast_responses = [
+    "{user_nick}, твоя остроумность застряла где-то между 'привет' и 'пока'.",
+    "Ого, {user_nick}! Ты, наверное, единственный, кто может провалить даже тест на IQ в отрицательную сторону.",
+    "{user_nick}, у тебя лицо такое, будто ты пытался поймать муху ртом и проглотил ее с первого раза.",
+    "Слушай, {user_nick}, когда раздавали мозги, ты, видимо, стоял в очереди за чувством юмора.",
+    "{user_nick}, ты как понедельник утром – никто тебе не рад.",
+    "У {user_nick} столько харизмы, сколько у меня терпения объяснять это.",
+    "{user_nick}, ты не грустный, у тебя просто лицо такое.",
+    "{user_nick}, я не говорю, что ты странный, но с тобой даже тараканы здороваются за руку.",
+    "Твоя логика, {user_nick}, как швейцарский сыр – вся в дырках.",
+    "{user_nick}, ты доказательство того, что эволюция иногда делает перерывы.",
+    "Мне кажется, {user_nick}, ты единственный, кто может споткнуться на ровном месте и упасть вверх.",
+    "{user_nick}, твои шутки такие старые, что их слушали еще динозавры.",
+    "Я не эксперт, {user_nick}, но, кажется, у тебя аллергия на успех.",
+    "{user_nick}, ты выглядишь так, будто только что боролся с медведем... и проиграл.",
+    "{user_nick}, если бы глупость светилась, ты бы освещал целый город.",
+    "Мне сказали, {user_nick}, что у тебя золотое сердце. Надеюсь, это не единственное золото, что у тебя есть.",
+    "{user_nick}, ты как просроченный йогурт – лучше держаться подальше.",
+    "Я пытался найти твои положительные стороны, {user_nick}, но заблудился в темноте.",
+    "{user_nick}, ты не забыл сегодня надеть штаны? Просто интересуюсь.",
+    "Говорят, смех продлевает жизнь. Глядя на тебя, {user_nick}, я чувствую себя бессмертным.",
+    "{user_nick}, твои идеи такие же свежие, как вчерашний хлеб!",
+    "{user_nick}, ты единственный, кто может упасть вверх по лестнице!",
+    "{user_nick}, твои шутки такие плоские, что даже блин выглядит объемным!",
+    "{user_nick}, ты настолько медленный, что даже черепаха предлагает тебе подвезти!",
+    "{user_nick}, твои навыки такие же полезные, как зонтик в пустыне!"
+]
+
+# Список предсказаний для команды /prediction
+prediction_responses = [
+    "Тебя ждет неожиданная встреча со старым другом.",
+    "В ближайшее время тебя ожидает приятный сюрприз.",
+    "Твои мечты скоро станут реальностью.",
+    "Тебя ждет успех в профессиональной сфере.",
+    "Впереди тебя ждет увлекательное путешествие.",
+    "Твои творческие идеи будут высоко оценены.",
+    "Тебя ждет период финансового благополучия.",
+    "В ближайшее время ты найдешь решение давней проблемы.",
+    "Тебя ждет встреча с интересным человеком.",
+    "Твои усилия скоро будут вознаграждены.",
+    "Тебя ждет неожиданное признание твоих талантов.",
+    "Впереди тебя ждет период личностного роста.",
+    "Твои планы будут реализованы успешно.",
+    "Тебя ждет приятное знакомство с новыми людьми.",
+    "В ближайшее время ты получишь важное известие.",
+    "Тебя ждет успех в новом начинании.",
+    "Твои мечты окажутся ближе, чем ты думаешь.",
+    "Впереди тебя ждет период вдохновения и творчества.",
+    "Тебя ждет неожиданная помощь от близких.",
+    "Твои усилия приведут к значительным результатам.",
+    "Тебя ждет неожиданное предложение, от которого сложно отказаться.",
+    "В ближайшее время ты откроешь в себе новые таланты.",
+    "Твои мечты окажутся даже лучше, чем ты представлял.",
+    "Тебя ждет период гармонии и душевного спокойствия.",
+    "Впереди тебя ждет встреча, которая изменит твою жизнь.",
+    "Твои творческие идеи приведут к неожиданному успеху.",
+    "Тебя ждет период, когда все будет складываться как нельзя лучше.",
+    "В ближайшее время ты получишь признание, которого заслуживаешь.",
+    "Твои планы превзойдут все ожидания.",
+    "Тебя ждет неожиданный поворот судьбы к лучшему."
+]
 
 # Функция для отправки случайного голосового сообщения
 async def send_random_voice(bot, chat_id, folder, prefix, count):
@@ -132,6 +242,7 @@ bot = AsyncTeleBot(TOKEN)
 
 @bot.message_handler(commands=['start'])
 async def start(message: types.Message):
+    logging.info(f"Command /start received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
     if message.chat.type not in ['private']:
         return
     logging.info(f"/start от {message.from_user.username or message.from_user.id} в чате {message.chat.id}")
@@ -151,6 +262,7 @@ async def start(message: types.Message):
 
 @bot.callback_query_handler(func=lambda call: True)
 async def button_callback(call: types.CallbackQuery):
+    logging.info(f"Callback query received: {call.data} from user {call.from_user.username or call.from_user.id} in chat {call.message.chat.id}")
     if call.message.chat.type not in ['private']:
         return
     logging.info(f"Кнопка: {call.data} от {call.from_user.username or call.from_user.id} в чате {call.message.chat.id}")
@@ -255,6 +367,7 @@ async def button_callback(call: types.CallbackQuery):
 
 @bot.message_handler(commands=['meme'])
 async def send_random_meme_command(message: types.Message):
+    logging.info(f"Command /meme received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
     user_id = message.from_user.id
     now = time.time()
 
@@ -298,6 +411,12 @@ async def send_random_meme_command(message: types.Message):
 
 @bot.message_handler(commands=['prediction'])
 async def vocal_predictor(message: types.Message):
+    logging.info(f"Command /prediction received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
+    # Проверяем тип чата
+    if message.chat.type != 'private':
+        logging.info(f"Command /prediction received in group chat {message.chat.id}")
+        return
+
     logging.info(f"/prediction в чате {message.chat.id} от {message.from_user.username or message.from_user.id}")
     prediction = get_random_vocal_prediction()
     
@@ -322,7 +441,8 @@ async def vocal_predictor(message: types.Message):
 
 @bot.message_handler(commands=['hall'])
 async def hall_command(message: types.Message):
-    logging.info(f"Команда /hall от {message.from_user.username or message.from_user.id}")
+    logging.info(f"Command /hall received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
+    hall_data = load_hall_data()
     
     try:
         args = message.text.split(maxsplit=2)
@@ -339,7 +459,6 @@ async def hall_command(message: types.Message):
         nominator = message.from_user.username or f"id{message.from_user.id}"
         
         # Проверяем, не номинирован ли уже этот пользователь
-        hall_data = load_hall_data()
         for row in hall_data:
             if row['name'] == nominee and row['category'] == category:
                 await bot.reply_to(message, f"@{nominee} уже номинирован в эту категорию!")
@@ -382,10 +501,11 @@ async def hall_command(message: types.Message):
 
 @bot.message_handler(commands=['halllist'])
 async def hall_list(message: types.Message):
+    logging.info(f"Command /halllist received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
+    hall_data = load_hall_data()
+    
     try:
         logging.info(f"Команда /halllist от {message.from_user.username or message.from_user.id}")
-        
-        hall_data = load_hall_data()
         
         legends = []
         cringe = []
@@ -424,7 +544,8 @@ async def hall_list(message: types.Message):
 
 @bot.message_handler(commands=['vote'])
 async def vote_command(message: types.Message):
-    logging.info(f"Команда /vote от {message.from_user.username or message.from_user.id}")
+    logging.info(f"Command /vote received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
+    hall_data = load_hall_data()
     
     try:
         args = message.text.split(maxsplit=2)
@@ -509,6 +630,8 @@ def get_random_russian_song():
 
 @bot.message_handler(commands=['random'])
 async def russian_song_command(message: types.Message):
+    logging.info(f"Command /random received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
+    # Ограничение по времени для команды /random
     user_id = message.from_user.id
     now = time.time()
     
@@ -538,6 +661,8 @@ async def russian_song_command(message: types.Message):
 
 @bot.message_handler(commands=['cat'])
 async def cat_command(message: types.Message):
+    logging.info(f"Command /cat received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
+    # Ограничение по времени для команды /cat
     user_id = message.from_user.id
     now = time.time()
     
@@ -570,6 +695,7 @@ async def cat_command(message: types.Message):
 
 @bot.message_handler(commands=['casino'])
 async def casino_command(message: types.Message):
+    logging.info(f"Command /casino received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
     user_id = message.from_user.id
     now = time.time()
 
@@ -632,6 +758,7 @@ async def casino_command(message: types.Message):
 
 @bot.message_handler(commands=['help'])
 async def help_command(message: types.Message):
+    logging.info(f"Command /help received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
     help_text = (
         "Список доступных команд:\n\n"
         "/prediction - Получить вокальное предсказание\n"
@@ -665,6 +792,8 @@ async def help_command(message: types.Message):
 
 @bot.message_handler(commands=['pole'])
 async def pole_command(message: types.Message):
+    logging.info(f"Command /pole received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
+    chat_id = message.chat.id
     user_id = message.from_user.id
     
     # Если пользователь уже в игре "Поле чудес" в этом чате, считаем это попыткой угадать
@@ -715,7 +844,7 @@ async def pole_command(message: types.Message):
 @bot.message_handler(content_types=['text', 'caption'], func=lambda message: message.text and not message.text.startswith('/'))
 async def handle_message(message: types.Message):
     # Логирование в самом начале функции для отладки получения всех сообщений
-    logging.info(f"[handle_message start] Получено сообщение от {message.from_user.id}. Chat ID: {message.chat.id}. Content Type: {message.content_type}")
+    logging.info(f"Received message from user {message.from_user.username or message.from_user.id} ({message.from_user.first_name} {message.from_user.last_name or ''}) in chat {message.chat.id} ({message.chat.type}): {message.text or message.caption}")
     
     # Явная проверка: если сообщение является командой, пропускаем его обработку в handle_message
     if message.text and message.text.startswith('/'):
@@ -985,6 +1114,7 @@ def get_random_vocal_prediction():
 
 @bot.message_handler(commands=['ask'])
 async def ask_command(message: types.Message):
+    logging.info(f"Command /ask received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
     user_id = message.from_user.id
     now = time.time()
 
@@ -1088,6 +1218,53 @@ async def ask_command(message: types.Message):
         logging.error(f"Traceback: {traceback.format_exc()}")
         await bot.delete_message(message.chat.id, thinking_msg.message_id)
         await bot.reply_to(message, f"Произошла ошибка при подключении к CharacterAI: {str(e)}")
+
+@bot.message_handler(commands=['proof'])
+async def proof_command(message: types.Message):
+    logging.info(f"Command /proof received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
+    # logging.info(f"Proof command received. Reply message: {message.reply_to_message}")
+    if not message.reply_to_message:
+        await bot.reply_to(message, "Пожалуйста, ответьте на сообщение командой /proof, чтобы я мог оценить его.")
+        return
+
+    # Получаем текст цитируемого сообщения
+    quoted_text = message.reply_to_message.text or message.reply_to_message.caption
+    if not quoted_text:
+        await bot.reply_to(message, "Я могу оценить только текстовые сообщения.")
+        return
+
+    # Генерируем случайный ответ
+    response_type = random.choices(
+        ['agree', 'disagree', 'unsure'],
+        weights=[10, 10, 5],  # 10 вариантов согласия, 10 несогласия, 5 неуверенности
+        k=1
+    )[0]
+
+    if response_type == 'agree':
+        response = random.choice(proof_agree_responses)
+    elif response_type == 'disagree':
+        response = random.choice(proof_disagree_responses)
+    else:
+        response = random.choice(proof_unsure_responses)
+
+    # Отправляем ответ бота как ответ на оригинальное процитированное сообщение
+    await bot.send_message(
+        chat_id=message.chat.id,
+        text=response,
+        reply_to_message_id=message.reply_to_message.message_id
+    )
+
+@bot.message_handler(commands=['roast'])
+async def roast_command(message: types.Message):
+    logging.info(f"Command /roast received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
+    user = message.from_user
+    user_nick = user.username or user.first_name or "дорогой друг"
+
+    # Генерируем случайный ответ из списка прожарок
+    response_template = random.choice(roast_responses)
+    response = response_template.format(user_nick=user_nick)
+
+    await bot.send_message(message.chat.id, response)
 
 def main():
     """Основная функция запуска бота"""
