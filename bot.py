@@ -1036,7 +1036,8 @@ async def ask_command(message: types.Message):
             logging.info(f"Отправляем сообщение в чат {chat_id} с вопросом: {question}...")
             # Вызываем send_message на client.chat и передаем необходимые аргументы
             # Этот вызов возвращает Turn object
-            response = await client.chat.send_message(CHARACTER_ID, chat_id, question)
+            question_full="Тебя в чате спрашивают "+question
+            response = await client.chat.send_message(CHARACTER_ID, chat_id, question_full)
             logging.info(f"Сообщение отправлено. Получен ответ от CharacterAI.")
             
             # turn_id и primary_candidate_id получаем напрямую из объекта Turn (response)
