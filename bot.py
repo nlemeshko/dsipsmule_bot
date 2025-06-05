@@ -726,7 +726,12 @@ def handle_message(message: types.Message):
                 )
                 del pole_games[user_id]
                 # Отправляем голосовое сообщение победы
-                send_random_voice(bot, message.chat.id, 'pole', 'win', 1)
+                try:
+                    with open('pole/win.mp3', 'rb') as voice:
+                        bot.send_voice(message.chat.id, voice)
+                    logging.info("Отправлено голосовое сообщение победы: pole/win.mp3")
+                except Exception as e:
+                    logging.error(f"Ошибка при отправке голосового сообщения победы: {e}")
             else:
                 response = "❌ Неверное слово! Продолжайте угадывать буквы."
                 # Отправляем случайное голосовое сообщение неверного ответа
@@ -757,7 +762,12 @@ def handle_message(message: types.Message):
                     )
                     del pole_games[user_id]
                     # Отправляем голосовое сообщение победы
-                    send_random_voice(bot, message.chat.id, 'pole', 'win', 1)
+                    try:
+                        with open('pole/win.mp3', 'rb') as voice:
+                            bot.send_voice(message.chat.id, voice)
+                        logging.info("Отправлено голосовое сообщение победы: pole/win.mp3")
+                    except Exception as e:
+                        logging.error(f"Ошибка при отправке голосового сообщения победы: {e}")
                 else:
                     # Показываем текущее состояние игры
                     word_display = display_word(game['word'], game['guessed_letters'])
