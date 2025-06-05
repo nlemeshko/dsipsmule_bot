@@ -705,8 +705,6 @@ async def handle_message(message: types.Message):
     # Логирование в самом начале функции для отладки получения всех сообщений
     logging.info(f"[handle_message start] Получено сообщение от {message.from_user.id}. Chat ID: {message.chat.id}. Content Type: {message.content_type}")
     
-    if message.chat.type not in ['private']:
-        return
     user_id = message.from_user.id
     
     # Проверяем, играет ли пользователь в "Поле чудес"
@@ -951,9 +949,6 @@ def get_random_vocal_prediction():
 
 @bot.message_handler(commands=['ask'])
 async def ask_command(message: types.Message):
-    if message.chat.type not in ['private']:
-        return
-
     user_id = message.from_user.id
     now = time.time()
 
