@@ -60,6 +60,8 @@ pole_games = {}
 # 'guessed_letters': set of letters guessed correctly
 # 'used_letters': set of all letters used
 # 'chat_id': the chat ID where the game is being played
+# 'initial_message_id': the message_id of the initial game message sent by the bot
+# 'bot_message_ids': list of bot's message IDs in the current game
 
 # Список слов для игры в "Поле чудес"
 pole_words = [
@@ -665,9 +667,19 @@ async def help_command(message: types.Message):
 async def pole_command(message: types.Message):
     user_id = message.from_user.id
     
+    # Если пользователь уже в игре "Поле чудес" в этом чате, считаем это попыткой угадать
+    if user_id in pole_games and pole_games[user_id]['chat_id'] == message.chat.id:
+        logging.info(f"Пользователь {user_id} уже в игре в чате {message.chat.id}. Обрабатываем как попытку угадать.")
+        # Передаем сообщение на обработку в handle_message
+        # Handle_message проверит, является ли это ответом на первое сообщение игры
+        await handle_message(message)
+        return
+
+    logging.info(f"Начинаем новую игру Поле чудес для пользователя {user_id} в чате {message.chat.id}")
     # Создаем новую игру и сохраняем chat_id
     game_state = create_pole_game()
     game_state['chat_id'] = message.chat.id
+    game_state['bot_message_ids'] = [] # Инициализируем список ID сообщений бота
     pole_games[user_id] = game_state
     game = pole_games[user_id]
     
@@ -679,19 +691,24 @@ async def pole_command(message: types.Message):
         logging.info(f"Картинка {image_path} отправлена для команды /pole.")
     else:
         logging.warning(f"Файл картинки {image_path} не найден для команды /pole.")
-    
+
     # Отправляем начальное состояние
     word_display = display_word(game['word'], game['guessed_letters'])
     letters_display = display_available_letters(game['used_letters'])
-    
+
     response = (
         f"🎯 Игра 'Поле чудес' началась!\n\n"
         f"Слово: {word_display}\n\n"
         f"Доступные буквы:\n{letters_display}\n\n"
         f"Отправьте букву или попробуйте угадать слово целиком!"
     )
-    
-    await bot.reply_to(message, response, parse_mode='HTML')
+
+    # Отправляем сообщение в ответ на команду и сохраняем его message_id как initial_message_id
+    initial_message = await bot.reply_to(message, response, parse_mode='HTML')
+    pole_games[user_id]['bot_message_ids'].append(initial_message.message_id) # Добавляем ID первого сообщения
+    pole_games[user_id]['initial_message_id'] = initial_message.message_id
+    logging.info(f"Для пользователя {user_id} в чате {message.chat.id} сохранена initial_message_id: {initial_message.message_id}")
+
     # Отправляем случайное голосовое сообщение ожидания
     await send_random_voice(bot, message.chat.id, 'pole', 'wait', 3)
 
@@ -699,70 +716,50 @@ async def pole_command(message: types.Message):
 async def handle_message(message: types.Message):
     # Логирование в самом начале функции для отладки получения всех сообщений
     logging.info(f"[handle_message start] Получено сообщение от {message.from_user.id}. Chat ID: {message.chat.id}. Content Type: {message.content_type}")
-    logging.info(f"message.text: {message.text}")
-    logging.info(f"message.caption: {message.caption}")
     
     user_id = message.from_user.id
     
-    logging.info(f"Проверка user_id {user_id} в pole_games.")
     # Проверяем, играет ли пользователь в "Поле чудес"
     if user_id in pole_games:
         game = pole_games[user_id]
         
         # Проверяем, находится ли сообщение в том же чате, где началась игра
-        logging.info(f"Проверка chat_id. Message chat_id: {message.chat.id}, Game chat_id: {game.get('chat_id')}")
         if message.chat.id != game['chat_id']:
             logging.info(f"Сообщение от игрока {user_id} в другом чате ({message.chat.id}) во время игры в чате {game['chat_id']}. Игнорируем в контексте игры.")
             return # Игнорируем сообщение, если оно не из чата игры
         
-        guess = message.text.lower().strip()
-        logging.info(f"Получена попытка угадать в Поле чудес: {guess}")
-        
-        # Отправляем сообщение о том, что бот думает
-        thinking_msg = await bot.reply_to(message, "🤔 Думаю...")
-        
-        # Ждем 5 секунд
-        time.sleep(5)
-        
-        # Если пользователь пытается угадать слово целиком
-        if len(guess) > 1:
-            if guess == game['word']:
-                response = (
-                    f"🎉 Поздравляем! Вы угадали слово '{game['word']}'!\n"
-                    f"Игра окончена. Чтобы начать новую игру, используйте команду /pole"
-                )
-                del pole_games[user_id]
-                # Отправляем голосовое сообщение победы
-                try:
-                    with open('pole/win.mp3', 'rb') as voice:
-                        await bot.send_voice(message.chat.id, voice)
-                    logging.info("Отправлено голосовое сообщение победы: pole/win.mp3")
-                except Exception as e:
-                    logging.error(f"Ошибка при отправке голосового сообщения победы: {e}")
-            else:
-                response = "❌ Неверное слово! Продолжайте угадывать буквы."
-                # Отправляем случайное голосовое сообщение неверного ответа
-                await send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
-        # Если пользователь пытается угадать букву
-        elif len(guess) == 1 and guess.isalpha():
-            if guess in game['used_letters']:
-                response = "Эта буква уже была использована!"
-                # Отправляем случайное голосовое сообщение неверного ответа
-                await send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
-            else:
-                game['used_letters'].add(guess)
-                if guess in game['word']:
-                    game['guessed_letters'].add(guess)
-                    response = "✅ Верно! Буква есть в слове."
-                    # Отправляем случайное голосовое сообщение верного ответа
-                    await send_random_voice(bot, message.chat.id, 'pole', 'yes', 3)
-                else:
-                    response = "❌ Неверно! Такой буквы нет в слове."
-                    # Отправляем случайное голосовое сообщение неверного ответа
-                    await send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
-                
-                # Проверяем, угадано ли всё слово
-                if all(letter in game['guessed_letters'] for letter in game['word']):
+        guess = None
+        is_private_chat = message.chat.type == 'private'
+
+        # --- Логика для личных чатов (цитирование не требуется) ---
+        if is_private_chat:
+            guess = message.text.lower().strip() if message.text else '' # Берем текст сообщения напрямую
+            logging.info(f"Личный чат. Получено сообщение для Поле чудес: {guess}")
+
+        # --- Логика для групповых чатов (цитирование обязательно) ---
+        # Проверяем, является ли сообщение ответом на одно из сообщений бота в текущей игре
+        elif message.reply_to_message and game.get('bot_message_ids') and message.reply_to_message.message_id in game['bot_message_ids']:
+            guess = message.text.lower().strip() if message.text else '' # Берем текст из цитирующего сообщения
+            logging.info(f"Групповой чат. Получена цитата для Поле чудес: {guess}")
+
+        # Если guess был получен (либо из личного чата, либо из цитаты в группе)
+        if guess is not None:
+            # Если guess пустой после обрезки (например, пустая цитата или сообщение только с пробелами)
+            if not guess:
+                response = "Пожалуйста, введите букву или слово для угадывания." + (" в цитируемом сообщении." if not is_private_chat else "")
+                await bot.reply_to(message, response)
+                return # Выходим, не обрабатывая пустой ввод
+
+            # Отправляем сообщение о том, что бот думает
+            thinking_msg = await bot.reply_to(message, "🤔 Думаю...")
+            game['bot_message_ids'].append(thinking_msg.message_id) # Добавляем ID сообщения "Думаю..."
+            
+            # Ждем 5 секунд
+            time.sleep(5)
+            
+            # Если пользователь пытается угадать слово целиком
+            if len(guess) > 1:
+                if guess == game['word']:
                     response = (
                         f"🎉 Поздравляем! Вы угадали слово '{game['word']}'!\n"
                         f"Игра окончена. Чтобы начать новую игру, используйте команду /pole"
@@ -776,20 +773,63 @@ async def handle_message(message: types.Message):
                     except Exception as e:
                         logging.error(f"Ошибка при отправке голосового сообщения победы: {e}")
                 else:
-                    # Показываем текущее состояние игры
-                    word_display = display_word(game['word'], game['guessed_letters'])
-                    letters_display = display_available_letters(game['used_letters'])
-                    response += f"\n\nСлово: {word_display}\n\nДоступные буквы:\n{letters_display}"
-        else:
-            response = "Пожалуйста, отправьте одну букву или попробуйте угадать слово целиком."
-            # Отправляем случайное голосовое сообщение неверного ответа
-            await send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
-        
-        # Удаляем сообщение "Думаю..."
-        await bot.delete_message(message.chat.id, thinking_msg.message_id)
-        
-        # Отправляем ответ
-        await bot.reply_to(message, response, parse_mode='HTML')
+                    response = "❌ Неверное слово! Продолжайте угадывать буквы." + (" Цитатой." if not is_private_chat else "")
+                    # Отправляем случайное голосовое сообщение неверного ответа
+                    # ID голосовых сообщений не добавляем в bot_message_ids, т.к. их не цитируют для хода
+                    await send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
+            # Если пользователь пытается угадать букву
+            elif len(guess) == 1 and guess.isalpha():
+                if guess in game['used_letters']:
+                    response = "Эта буква уже была использована!" + (" Цитатой." if not is_private_chat else "")
+                    # Отправляем случайное голосовое сообщение неверного ответа
+                    await send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
+                else:
+                    game['used_letters'].add(guess)
+                    if guess in game['word']:
+                        game['guessed_letters'].add(guess)
+                        response = "✅ Верно! Буква есть в слове." + (" Цитатой." if not is_private_chat else "")
+                        # Отправляем случайное голосовое сообщение верного ответа
+                        await send_random_voice(bot, message.chat.id, 'pole', 'yes', 3)
+                    else:
+                        response = "❌ Неверно! Такой буквы нет в слове." + (" Цитатой." if not is_private_chat else "")
+                        # Отправляем случайное голосовое сообщение неверного ответа
+                        await send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
+                    
+                    # Проверяем, угадано ли всё слово
+                    if all(letter in game['guessed_letters'] for letter in game['word']):
+                        response = (
+                            f"🎉 Поздравляем! Вы угадали слово '{game['word']}'!\n"
+                            f"Игра окончена. Чтобы начать новую игру, используйте команду /pole"
+                        )
+                        del pole_games[user_id]
+                        # Отправляем голосовое сообщение победы
+                        try:
+                            with open('pole/win.mp3', 'rb') as voice:
+                                await bot.send_voice(message.chat.id, voice)
+                            logging.info("Отправлено голосовое сообщение победы: pole/win.mp3")
+                        except Exception as e:
+                            logging.error(f"Ошибка при отправке голосового сообщения победы: {e}")
+                    else:
+                        # Показываем текущее состояние игры
+                        word_display = display_word(game['word'], game['guessed_letters'])
+                        letters_display = display_available_letters(game['used_letters'])
+                        response += f"\n\nСлово: {word_display}\n\nДоступные буквы:\n{letters_display}"
+            else:
+                response = "Пожалуйста, отправьте одну букву или попробуйте угадать слово целиком." + (" Цитатой." if not is_private_chat else "")
+                # Отправляем случайное голосовое сообщение неверного ответа
+                # ID голосовых сообщений не добавляем в bot_message_ids, т.к. их не цитируют для хода
+                await send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
+            
+            # Удаляем сообщение "Думаю..."
+            await bot.delete_message(message.chat.id, thinking_msg.message_id)
+            
+            # Отправляем ответ
+            response_message = await bot.reply_to(message, response, parse_mode='HTML')
+            game['bot_message_ids'].append(response_message.message_id) # Добавляем ID ответного сообщения
+            return
+
+        # Если это не цитата одного из сообщений бота в игре, игнорируем
+        logging.info("Сообщение не является цитатой одного из сообщений бота в игре. Игнорируем в контексте игры.")
         return
 
     # Добавляем логирование для отладки
@@ -809,6 +849,11 @@ async def handle_message(message: types.Message):
         '/start', '/prediction', '/hall', '/halllist', '/vote',
         '/random', '/cat', '/meme', '/help', '/casino', '/pole', '/ask'
     ]
+
+    # Если сообщение является известной командой, позволяем обработчику команды выполнить свою логику
+    if message.text and message.text.split()[0].lower() in known_commands:
+        logging.info(f"Сообщение является известной командой: {message.text.split()[0].lower()}. Позволяем обработчику команды работать.")
+        return # Выходим из handle_message, чтобы обработчик команды мог работать
 
     # FSM: если пользователь пишет анонимку
     if user_states.get(user_id) == ANON_STATE:
@@ -840,7 +885,7 @@ async def handle_message(message: types.Message):
         else:
             await bot.reply_to(message, "Пожалуйста, отправьте название или ссылку на песню.")
             return
-
+            
     # FSM: если пользователь отправляет ссылку для оценки
     elif user_states.get(user_id) == RATE_LINK_STATE:
         logging.info(f"Пользователь {user_id} в RATE_LINK_STATE. Обработка сообщения.")
@@ -993,13 +1038,13 @@ async def ask_command(message: types.Message):
 
             logging.info("Отправляем сообщение в чат...")
             # Вызываем send_message на client.chat и передаем необходимые аргументы
-            response = await client.chat.send_message(CHARACTER_ID, chat_object.chat_id, question)
+            response = await client.chat.send_message(CHARACTER_ID, chat_object.chat.id, question)
             reply = response.get_primary_candidate().text
             logging.info(f"CharacterAI: Получен ответ: {reply}")
 
-            logging.info(f"Генерируем голосовой ответ для chat_id: {response.chat_id}, turn_id: {response.turn_id}, primary_candidate_id: {response.primary_candidate_id}, voice_id: {CHARACTER_VOICE_ID}")
+            logging.info(f"Генерируем голосовой ответ для chat_id: {response.chat.id}, turn_id: {response.turn_id}, primary_candidate_id: {response.primary_candidate_id}, voice_id: {CHARACTER_VOICE_ID}")
             # Используем переменную client, созданную выше
-            speech = await client.utils.generate_speech(response.chat_id, response.turn_id, response.primary_candidate_id, CHARACTER_VOICE_ID)
+            speech = await client.utils.generate_speech(response.chat.id, response.turn_id, response.primary_candidate_id, CHARACTER_VOICE_ID)
             logging.info("Голосовой ответ сгенерирован.")
 
             # Отправляем голосовое сообщение пользователю
