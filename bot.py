@@ -55,6 +55,12 @@ pending_promotions = {}
 # Добавляем словарь для отслеживания состояния игры в "Поле чудес"
 pole_games = {}
 
+# Each game will store:
+# 'word': the word to guess
+# 'guessed_letters': set of letters guessed correctly
+# 'used_letters': set of all letters used
+# 'chat_id': the chat ID where the game is being played
+
 # Список слов для игры в "Поле чудес"
 pole_words = [
     "крыша", "окно", "дверь", "стена", "пол", "потолок", "лестница", "балкон",
@@ -659,8 +665,9 @@ async def help_command(message: types.Message):
 async def pole_command(message: types.Message):
     user_id = message.from_user.id
     
-    # Создаем новую игру и добавляем message_id первого сообщения бота
+    # Создаем новую игру и сохраняем chat_id
     game_state = create_pole_game()
+    game_state['chat_id'] = message.chat.id
     pole_games[user_id] = game_state
     game = pole_games[user_id]
     
@@ -688,16 +695,25 @@ async def pole_command(message: types.Message):
     # Отправляем случайное голосовое сообщение ожидания
     await send_random_voice(bot, message.chat.id, 'pole', 'wait', 3)
 
-@bot.message_handler(func=lambda message: not message.text or not message.text.startswith('/'))
+@bot.message_handler(content_types=['text', 'caption'])
 async def handle_message(message: types.Message):
     # Логирование в самом начале функции для отладки получения всех сообщений
     logging.info(f"[handle_message start] Получено сообщение от {message.from_user.id}. Chat ID: {message.chat.id}. Content Type: {message.content_type}")
+    logging.info(f"message.text: {message.text}")
+    logging.info(f"message.caption: {message.caption}")
     
     user_id = message.from_user.id
     
+    logging.info(f"Проверка user_id {user_id} в pole_games.")
     # Проверяем, играет ли пользователь в "Поле чудес"
     if user_id in pole_games:
         game = pole_games[user_id]
+        
+        # Проверяем, находится ли сообщение в том же чате, где началась игра
+        logging.info(f"Проверка chat_id. Message chat_id: {message.chat.id}, Game chat_id: {game.get('chat_id')}")
+        if message.chat.id != game['chat_id']:
+            logging.info(f"Сообщение от игрока {user_id} в другом чате ({message.chat.id}) во время игры в чате {game['chat_id']}. Игнорируем в контексте игры.")
+            return # Игнорируем сообщение, если оно не из чата игры
         
         guess = message.text.lower().strip()
         logging.info(f"Получена попытка угадать в Поле чудес: {guess}")
