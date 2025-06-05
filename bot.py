@@ -534,6 +534,20 @@ async def hall_list(message: types.Message):
         
         logging.info(f"Список зала славы/позора отправлен: {response_text}")
         
+        if os.path.exists(image_path):
+            with open(image_path, 'rb') as photo:
+                # Отправляем картинку с текстом предсказания в подписи как ответ на сообщение
+                await bot.send_photo(
+                    message.chat.id, 
+                    photo, 
+                    caption=response_text,
+                    reply_to_message_id=message.message_id # Добавляем reply_to_message_id
+                )
+            logging.info(f"Картинка {image_path} отправлена как ответ для команды /halllist.")
+        else:
+            logging.warning(f"Файл картинки {image_path} не найден для команды /halllist. Отправляю только текст как ответ.")
+            await bot.reply_to(message, response_text)
+        
     except Exception as e:
         logging.error(f"Ошибка в команде /halllist: {e}")
         await bot.reply_to(message, f"Произошла ошибка при получении списка: {e}")
