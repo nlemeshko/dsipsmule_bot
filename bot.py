@@ -1252,9 +1252,15 @@ async def roast_command(message: types.Message):
     logging.info(f"Command /roast received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
     
     if message.reply_to_message:
-        # Получаем никнейм пользователя, которого прожариваем (если это ответ на сообщение)
-        user_nick = message.reply_to_message.from_user.first_name or message.reply_to_message.from_user.username
-        reply_id = message.reply_to_message.message_id
+        replied_message = message.reply_to_message
+        # Проверяем, является ли сообщение ответом на сообщение из канала или от пользователя
+        if replied_message.sender_chat:
+            # Если сообщение из канала или группы (от имени чата)
+            user_nick = replied_message.sender_chat.title
+        else:
+            # Если сообщение от пользователя
+            user_nick = replied_message.from_user.first_name or replied_message.from_user.username
+        reply_id = replied_message.message_id
     else:
         # Если это не ответ на сообщение, прожариваем пользователя, который ввел команду
         user_nick = message.from_user.first_name or message.from_user.username
