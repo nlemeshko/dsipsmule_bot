@@ -840,8 +840,15 @@ async def pole_command(message: types.Message):
 @bot.message_handler(content_types=['text', 'caption'], func=lambda message: message.text and not message.text.startswith('/'))
 async def handle_message(message: types.Message):
     # Логирование в самом начале функции для отладки получения всех сообщений
-    logging.info(f"Received message from user {message.from_user.username or message.from_user.id} ({message.from_user.first_name} {message.from_user.last_name or ''}) in chat {message.chat.id} ({message.chat.type}): {message.text or message.caption}")
-    
+    logging.info(f"[handle_message] Received message from user {message.from_user.username or message.from_user.id} ({message.from_user.first_name} {message.from_user.last_name or ''}) in chat {message.chat.id} ({message.chat.type}): {message.text or message.caption}")
+    logging.info(f"[handle_message] message.chat.id: {message.chat.id}, message.chat.type: {message.chat.type}")
+    if message.reply_to_message:
+        logging.info(f"[handle_message] Reply message detected. reply_to_message.message_id: {message.reply_to_message.message_id}")
+        if message.reply_to_message.sender_chat:
+             logging.info(f"[handle_message] Reply sender_chat.id: {message.reply_to_message.sender_chat.id}, reply sender_chat.type: {message.reply_to_message.sender_chat.type}")
+        if message.reply_to_message.chat:
+             logging.info(f"[handle_message] Reply chat.id: {message.reply_to_message.chat.id}, Reply chat.type: {message.reply_to_message.chat.type}")
+
     # Явная проверка: если сообщение является командой, пропускаем его обработку в handle_message
     if message.text and message.text.startswith('/'):
         logging.info(f"Сообщение от {message.from_user.id} является командой: {message.text}. Пропускаем handle_message.")
@@ -1249,8 +1256,15 @@ async def proof_command(message: types.Message):
 
 @bot.message_handler(commands=['roast'])
 async def roast_command(message: types.Message):
-    logging.info(f"Command /roast received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
-    
+    logging.info(f"[roast_command] Command /roast received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
+    logging.info(f"[roast_command] message.chat.id: {message.chat.id}, message.chat.type: {message.chat.type}")
+    if message.reply_to_message:
+        logging.info(f"[roast_command] Reply message detected. reply_to_message.message_id: {message.reply_to_message.message_id}")
+        if message.reply_to_message.sender_chat:
+             logging.info(f"[roast_command] Reply sender_chat.id: {message.reply_to_message.sender_chat.id}, reply sender_chat.type: {message.reply_to_message.sender_chat.type}")
+        if message.reply_to_message.chat:
+             logging.info(f"[roast_command] Reply chat.id: {message.reply_to_message.chat.id}, Reply chat.type: {message.reply_to_message.chat.type}")
+
     if message.reply_to_message:
         replied_message = message.reply_to_message
         # Проверяем, является ли сообщение ответом на сообщение из канала или от пользователя
