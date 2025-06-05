@@ -1259,14 +1259,35 @@ async def proof_command(message: types.Message):
 @bot.message_handler(commands=['roast'])
 async def roast_command(message: types.Message):
     logging.info(f"Command /roast received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
-    user = message.from_user
-    user_nick = user.username or user.first_name or "дорогой друг"
-
-    # Генерируем случайный ответ из списка прожарок
-    response_template = random.choice(roast_responses)
-    response = response_template.format(user_nick=user_nick)
-
-    await bot.send_message(message.chat.id, response)
+    
+    if not message.reply_to_message:
+        await bot.reply_to(message, "Эта команда работает только в ответ на сообщение!")
+        return
+    
+    # Получаем никнейм пользователя, которого прожариваем
+    user_nick = message.reply_to_message.from_user.username or message.reply_to_message.from_user.first_name
+    
+    # Выбираем случайный ответ и подставляем никнейм
+    response = random.choice(roast_responses).format(user_nick=user_nick)
+    
+    # Отправляем изображение и текст как ответ на исходное сообщение
+    try:
+        image_path = 'roast.png'
+        if os.path.exists(image_path):
+            with open(image_path, 'rb') as photo:
+                await bot.send_photo(
+                    message.chat.id,
+                    photo,
+                    caption=response,
+                    reply_to_message_id=message.reply_to_message.message_id
+                )
+            logging.info(f"Картинка {image_path} отправлена с ответом для команды /roast")
+        else:
+            logging.warning(f"Файл картинки {image_path} не найден для команды /roast. Отправляю только текст.")
+            await bot.reply_to(message.reply_to_message, response)
+    except Exception as e:
+        logging.error(f"Ошибка при отправке картинки в команде /roast: {e}")
+        await bot.reply_to(message.reply_to_message, response)
 
 def main():
     """Основная функция запуска бота"""
