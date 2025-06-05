@@ -24,7 +24,10 @@ logging.basicConfig(
 
 # Получение токена бота и ID разрешенной группы из переменных окружения
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-ALLOWED_GROUP_ID = int(os.getenv('ALLOWED_GROUP_ID'))
+# Читаем ALLOWED_GROUP_ID как строку, разделенную запятыми
+allowed_groups_str = os.getenv('ALLOWED_GROUP_ID', '')
+# Преобразуем строку в список целых чисел
+ALLOWED_GROUP_IDS = [int(group_id.strip()) for group_id in allowed_groups_str.split(',') if group_id.strip()]
 CHARACTER_AI_TOKEN = os.getenv('CHARACTER_AI_TOKEN')
 CHARACTER_ID = "P5xPFx4UhFQ-jcbMRwofQBkXijxNSo6NOYbPHCT4auE"
 CHARACTER_VOICE_ID = "25726345-4858-4c38-99a7-0d5fc583ff5e"
@@ -1307,8 +1310,8 @@ async def roast_command(message: types.Message):
 
 def main():
     """Основная функция запуска бота"""
-    if not ALLOWED_GROUP_ID:
-        logging.error("ALLOWED_GROUP_ID не установлен в .env файле!")
+    if not ALLOWED_GROUP_IDS:
+        logging.error("ALLOWED_GROUP_IDS не установлен в .env файле!")
         return
 
     # Запускаем бота
