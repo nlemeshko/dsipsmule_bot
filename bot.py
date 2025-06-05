@@ -273,7 +273,7 @@ async def button_callback(call: types.CallbackQuery):
         user_states[user_id] = ANON_STATE
         logging.info(f"Установлено состояние ANON_STATE для пользователя {user_id}")
         response_text = "Отправьте текст, фотографию или голосовое сообщение для анонимки:"
-        image_path = 'anon.png'
+        image_path = 'images/anon.png'
         try:
             if os.path.exists(image_path):
                 with open(image_path, 'rb') as photo:
@@ -288,7 +288,7 @@ async def button_callback(call: types.CallbackQuery):
     elif call.data == "button2":
         user_states[user_id] = SONG_STATE
         response_text = "Введи название песни или ссылку на неё. Можно добавить теги (например: #дуэт #челлендж #классика):"
-        image_path = 'sing.png'
+        image_path = 'images/sing.png'
         try:
             if os.path.exists(image_path):
                 with open(image_path, 'rb') as photo:
@@ -303,7 +303,7 @@ async def button_callback(call: types.CallbackQuery):
     elif call.data == "button3":
         user_states[user_id] = RATE_LINK_STATE
         response_text = "Отправь ссылку на свой трек в Smule:"
-        image_path = 'rate.png'
+        image_path = 'images/rate.png'
         try:
             if os.path.exists(image_path):
                 with open(image_path, 'rb') as photo:
@@ -352,7 +352,7 @@ async def button_callback(call: types.CallbackQuery):
     elif call.data == "button6":
         user_states[user_id] = PROMOTE_STATE
         response_text = "Отправьте ссылку на трек, который хотите пропиарить:"
-        image_path = 'piar.png'
+        image_path = 'images/piar.png'
         try:
             if os.path.exists(image_path):
                 with open(image_path, 'rb') as photo:
@@ -422,7 +422,7 @@ async def vocal_predictor(message: types.Message):
     
     try:
         # Путь к файлу с картинкой
-        image_path = 'prediction.png' # Укажите правильный путь, если файл не в той же директории
+        image_path = 'images/prediction.png'
 
         # Проверяем, существует ли файл
         if os.path.exists(image_path):
@@ -436,7 +436,7 @@ async def vocal_predictor(message: types.Message):
             await bot.reply_to(message, f"🧙‍♂️ Вокальный предсказатель:\n{prediction}")
 
     except Exception as e:
-        logging.error(f"Ошибка при отправке картинки prediction.png или предсказания: {e}")
+        logging.error(f"Ошибка при отправке картинки {image_path} или предсказания: {e}")
         await bot.reply_to(message, f"Произошла ошибка при получении предсказания: {e}")
 
 @bot.message_handler(commands=['hall'])
@@ -484,7 +484,7 @@ async def hall_command(message: types.Message):
         )
 
         # Добавляем отправку картинки
-        image_path = 'hall.png'
+        image_path = 'images/hall.png'
         if os.path.exists(image_path):
             with open(image_path, 'rb') as photo:
                 await bot.send_photo(message.chat.id, photo, caption=response_text)
@@ -527,7 +527,7 @@ async def hall_list(message: types.Message):
         response_text = legends_text + cringe_text
 
         # Добавляем отправку картинки
-        image_path = 'halllist.png'
+        image_path = 'images/halllist.png'
         if os.path.exists(image_path):
             with open(image_path, 'rb') as photo:
                 await bot.send_photo(message.chat.id, photo, caption=response_text)
@@ -583,7 +583,7 @@ async def vote_command(message: types.Message):
         response_text = f"{category_emoji} Ваш голос за @{nominee} учтен!"
 
         # Добавляем отправку картинки
-        image_path = 'vote.png'
+        image_path = 'images/vote.png'
         if os.path.exists(image_path):
             with open(image_path, 'rb') as photo:
                 await bot.send_photo(message.chat.id, photo, caption=response_text)
@@ -711,7 +711,7 @@ async def casino_command(message: types.Message):
     last_casino_time[user_id] = now
 
     # Отправляем изображение казино
-    image_path = 'casino.png'
+    image_path = 'images/casino.png'
     if os.path.exists(image_path):
         with open(image_path, 'rb') as photo:
             await bot.send_photo(message.chat.id, photo)
@@ -761,6 +761,8 @@ async def help_command(message: types.Message):
     logging.info(f"Command /help received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
     help_text = (
         "Список доступных команд:\n\n"
+        "/start - Начать взаимодействие с ботом\n"
+        "/help - Показать это сообщение помощи\n"
         "/prediction - Получить вокальное предсказание\n"
         "/hall [legend/cringe] [имя пользователя] - Номинировать пользователя в Зал славы/позора\n"
         "/halllist - Посмотреть списки Зала славы/позора\n"
@@ -768,20 +770,21 @@ async def help_command(message: types.Message):
         "/random - Получить случайную русскую песню с Last.fm\n"
         "/cat - Получить случайное изображение котика\n"
         "/meme - Получить случайный мем\n"
-        "/casino - Играть в слоты\n"
-        "/pole - Играть в Поле чудес\n"
+        "/casino - Сыграть в слоты с анимированными символами\n"
+        "/pole - Сыграть в Поле чудес с голосовыми подсказками\n"
         "/ask [вопрос] - Задать вопрос AI-персонажу\n"
-        "/help - Показать это сообщение помощи\n\n"
+        "/roast - Получить критику исполнения\n"
+        "/proof - Подтвердить исполнение\n\n"
         "Также доступны функции через кнопки в главном меню (/start) в общении с @dsipsmule_bot:\n"
-        "🕵 Анонимка\n"
-        "🎶 Песня\n"
-        "🎧 Оценить\n"
-        "🎲 Песня дня\n"
-        "📢 Промо"
+        "🕵 Анонимка - Отправить анонимное сообщение\n"
+        "🎶 Песня - Предложить песню\n"
+        "🎧 Оценить - Оценить исполнение\n"
+        "🎲 Песня дня - Получить случайную песню дня\n"
+        "📢 Промо - Отправить промо-запрос"
     )
     
     # Добавляем отправку картинки
-    image_path = 'help.png'
+    image_path = 'images/help.png'
     if os.path.exists(image_path):
         with open(image_path, 'rb') as photo:
             await bot.send_photo(message.chat.id, photo, caption=help_text)
@@ -813,7 +816,7 @@ async def pole_command(message: types.Message):
     game = pole_games[user_id]
     
     # Отправляем изображение поля чудес
-    image_path = 'pole.png'
+    image_path = 'images/pole.png'
     if os.path.exists(image_path):
         with open(image_path, 'rb') as photo:
             await bot.send_photo(message.chat.id, photo)
@@ -1102,14 +1105,9 @@ async def handle_sticker(message: types.Message):
 
 def get_random_vocal_prediction():
     try:
-        with open('vocal.csv', encoding='utf-8') as f:
-            reader = list(csv.reader(f))
-            if not reader:
-                return "🔮 Не удалось получить предсказание."
-            row = random.choice(reader)
-            return row[0] if row else "🔮 Не удалось получить предсказание."
+        return random.choice(prediction_responses)
     except Exception as e:
-        logging.error(f"Ошибка чтения vocal.csv: {e}")
+        logging.error(f"Ошибка при получении предсказания: {e}")
         return "🔮 Не удалось получить предсказание."
 
 @bot.message_handler(commands=['ask'])
@@ -1187,7 +1185,7 @@ async def ask_command(message: types.Message):
             logging.info("Голосовое сообщение отправлено успешно.")
 
             # Отправляем изображение ask.png
-            image_path = 'ask.png'
+            image_path = 'images/ask.png'
             if os.path.exists(image_path):
                 try:
                     with open(image_path, 'rb') as photo:
@@ -1239,7 +1237,7 @@ async def proof_command(message: types.Message):
     
     # Отправляем изображение и текст как ответ на исходное сообщение
     try:
-        image_path = 'proof.png'
+        image_path = 'images/proof.png'
         if os.path.exists(image_path):
             with open(image_path, 'rb') as photo:
                 await bot.send_photo(
@@ -1277,7 +1275,7 @@ async def roast_command(message: types.Message):
     
     # Отправляем изображение и текст как ответ на соответствующее сообщение
     try:
-        image_path = 'roast.png'
+        image_path = 'images/roast.png'
         if os.path.exists(image_path):
             with open(image_path, 'rb') as photo:
                 await bot.send_photo(
