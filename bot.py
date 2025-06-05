@@ -67,7 +67,7 @@ pole_words = [
 IMGUR_CLIENT_ID = os.getenv('IMGUR_CLIENT_ID')
 
 # Функция для отправки случайного голосового сообщения
-def send_random_voice(bot, chat_id, folder, prefix, count):
+async def send_random_voice(bot, chat_id, folder, prefix, count):
     try:
         # Выбираем случайный номер
         number = random.randint(1, count)
@@ -76,7 +76,7 @@ def send_random_voice(bot, chat_id, folder, prefix, count):
         
         if os.path.exists(voice_path):
             with open(voice_path, 'rb') as voice:
-                bot.send_voice(chat_id, voice)
+                await bot.send_voice(chat_id, voice)
             logging.info(f"Отправлено голосовое сообщение: {voice_path}")
         else:
             logging.error(f"Файл голосового сообщения не найден: {voice_path}")
@@ -698,7 +698,7 @@ async def pole_command(message: types.Message):
     
     await bot.reply_to(message, response, parse_mode='HTML')
     # Отправляем случайное голосовое сообщение ожидания
-    send_random_voice(bot, message.chat.id, 'pole', 'wait', 3)
+    await send_random_voice(bot, message.chat.id, 'pole', 'wait', 3)
 
 @bot.message_handler(func=lambda message: not message.text or not message.text.startswith('/'))
 async def handle_message(message: types.Message):
@@ -738,24 +738,24 @@ async def handle_message(message: types.Message):
             else:
                 response = "❌ Неверное слово! Продолжайте угадывать буквы."
                 # Отправляем случайное голосовое сообщение неверного ответа
-                send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
+                await send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
         # Если пользователь пытается угадать букву
         elif len(guess) == 1 and guess.isalpha():
             if guess in game['used_letters']:
                 response = "Эта буква уже была использована!"
                 # Отправляем случайное голосовое сообщение неверного ответа
-                send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
+                await send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
             else:
                 game['used_letters'].add(guess)
                 if guess in game['word']:
                     game['guessed_letters'].add(guess)
                     response = "✅ Верно! Буква есть в слове."
                     # Отправляем случайное голосовое сообщение верного ответа
-                    send_random_voice(bot, message.chat.id, 'pole', 'yes', 3)
+                    await send_random_voice(bot, message.chat.id, 'pole', 'yes', 3)
                 else:
                     response = "❌ Неверно! Такой буквы нет в слове."
                     # Отправляем случайное голосовое сообщение неверного ответа
-                    send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
+                    await send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
                 
                 # Проверяем, угадано ли всё слово
                 if all(letter in game['guessed_letters'] for letter in game['word']):
@@ -779,7 +779,7 @@ async def handle_message(message: types.Message):
         else:
             response = "Пожалуйста, отправьте одну букву или попробуйте угадать слово целиком."
             # Отправляем случайное голосовое сообщение неверного ответа
-            send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
+            await send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
         
         # Удаляем сообщение "Думаю..."
         await bot.delete_message(message.chat.id, thinking_msg.message_id)
