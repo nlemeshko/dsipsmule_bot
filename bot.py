@@ -54,6 +54,11 @@ pending_promotions = {}
 
 # Добавляем словарь для отслеживания состояния игры в "Поле чудес"
 pole_games = {}
+# Each game will store:
+# 'word': the word to guess
+# 'guessed_letters': set of letters guessed correctly
+# 'used_letters': set of all letters used
+# 'last_bot_message_id': the message_id of the last message sent by the bot for this game
 
 # Список слов для игры в "Поле чудес"
 pole_words = [
@@ -659,8 +664,9 @@ async def help_command(message: types.Message):
 async def pole_command(message: types.Message):
     user_id = message.from_user.id
     
-    # Создаем новую игру
-    pole_games[user_id] = create_pole_game()
+    # Создаем новую игру и добавляем message_id первого сообщения бота
+    game_state = create_pole_game()
+    pole_games[user_id] = game_state
     game = pole_games[user_id]
     
     # Отправляем изображение поля чудес
@@ -686,6 +692,9 @@ async def pole_command(message: types.Message):
     await bot.reply_to(message, response, parse_mode='HTML')
     # Отправляем случайное голосовое сообщение ожидания
     await send_random_voice(bot, message.chat.id, 'pole', 'wait', 3)
+    # Сохраняем message_id этого сообщения
+    initial_message = await bot.send_message(message.chat.id, response, parse_mode='HTML')
+    pole_games[user_id]['last_bot_message_id'] = initial_message.message_id
 
 @bot.message_handler(func=lambda message: not message.text or not message.text.startswith('/'))
 async def handle_message(message: types.Message):
@@ -697,15 +706,23 @@ async def handle_message(message: types.Message):
     # Проверяем, играет ли пользователь в "Поле чудес"
     if user_id in pole_games:
         game = pole_games[user_id]
-        # Проверяем, начинается ли сообщение с '/pole '
-        if message.text and message.text.lower().startswith('/pole '):
-            # Извлекаем предполагаемый ответ после '/pole '
-            guess = message.text.lower().strip().split(' ', 1)[1] if len(message.text.split(' ', 1)) > 1 else ''
-            logging.info(f"Получена попытка угадать в Поле чудес: {guess}")
-        else:
-            # Если сообщение не начинается с '/pole ', игнорируем его в контексте игры
-            logging.info("Сообщение не является попыткой угадать в Поле чудес.")
-            return # Выходим из функции, чтобы не обрабатывать это сообщение как часть игры
+        
+        # Проверяем, является ли сообщение ответом на последнее сообщение бота в этой игре
+        is_reply_to_bot = (message.reply_to_message
+                         and 'last_bot_message_id' in game
+                         and message.reply_to_message.message_id == game['last_bot_message_id'])
+                         
+        # Проверяем, начинается ли текст ответа с '/pole '
+        starts_with_pole = (message.text and message.text.lower().startswith('/pole '))
+
+        # Если это не ответ на последнее сообщение бота ИЛИ не начинается с /pole, игнорируем
+        if not is_reply_to_bot or not starts_with_pole:
+            logging.info("Сообщение не является ответом на последнее сообщение бота или не начинается с /pole. Игнорируем в контексте игры.")
+            return # Выходим из функции
+            
+        # Извлекаем предполагаемый ответ после '/pole '
+        guess = message.text.lower().strip().split(' ', 1)[1] if len(message.text.split(' ', 1)) > 1 else ''
+        logging.info(f"Получена попытка угадать в Поле чудес: {guess}")
         
         # Отправляем сообщение о том, что бот думает
         thinking_msg = await bot.reply_to(message, "🤔 Думаю...")
@@ -778,7 +795,9 @@ async def handle_message(message: types.Message):
         await bot.delete_message(message.chat.id, thinking_msg.message_id)
         
         # Отправляем ответ
-        await bot.reply_to(message, response, parse_mode='HTML')
+        sent_message = await bot.reply_to(message, response, parse_mode='HTML')
+        # Обновляем message_id последнего сообщения бота в игре
+        pole_games[user_id]['last_bot_message_id'] = sent_message.message_id
         return
 
     # Добавляем логирование для отладки
