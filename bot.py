@@ -50,6 +50,9 @@ IMGUR_CLIENT_ID = os.getenv('IMGUR_CLIENT_ID')
 last_cat_time = {}
 last_meme_time = {}
 
+# Добавляем словарь для отслеживания времени последнего запроса для /casino
+last_casino_time = {}
+
 # Загрузка данных зала славы/позора
 def load_hall_data():
     try:
@@ -509,7 +512,19 @@ def cat_command(message: types.Message):
 
 @bot.message_handler(commands=['casino'])
 def casino_command(message: types.Message):
+    user_id = message.from_user.id
+    now = time.time()
+
+    # Проверяем ограничение на частоту запросов для /casino
+    if user_id in last_casino_time and now - last_casino_time[user_id] < 60:
+        remaining_time = int(60 - (now - last_casino_time[user_id]))
+        bot.reply_to(message, f"⏳ Подождите {remaining_time} секунд перед следующим запуском казино.")
+        return
+
     logging.info(f"Команда /casino от {message.from_user.username or message.from_user.id}")
+
+    # Обновляем время последнего запроса
+    last_casino_time[user_id] = now
 
     # Список стандартных символов для слотов (теперь все эмодзи)
     symbols = [
@@ -522,39 +537,38 @@ def casino_command(message: types.Message):
     # Генерируем 3 случайных символа
     result_symbols = [random.choice(symbols) for _ in range(3)]
 
-    # Формируем строку с результатом
-    result_text = " | ".join(result_symbols)
-
-    try:
-        # Отправляем результат слотов
-        bot.send_message(message.chat.id, result_text)
-    except Exception as e:
-        logging.error(f"Ошибка при отправке результата казино: {e}")
+    # Отправляем символы по очереди с задержкой
+    for symbol in result_symbols:
+        try:
+            bot.send_message(message.chat.id, symbol)
+            time.sleep(1) # Задержка в 1 секунду между символами
+        except Exception as e:
+            logging.error(f"Ошибка при отправке символа казино {symbol}: {e}")
 
     # Проверяем выигрыш (все символы одинаковые)
     if all(x == result_symbols[0] for x in result_symbols):
         # 10% шанс на выигрыш
         if random.random() < 0.1:
-            # Отправляем эмодзи при выигрыше
+            # Отправляем эмодзи при выигрыше (один символ)
             win_emoji = '🎉' # Эмодзи хлопушки
             try:
-                bot.send_message(message.chat.id, win_emoji * 5) # Отправим несколько для наглядности
-                bot.send_message(message.chat.id, "ПОЗДРАВЛЯЕМ С ПОБЕДОЙ! 👏")
+                # bot.send_message(message.chat.id, win_emoji * 5) # Отправим несколько для наглядности
+                bot.send_message(message.chat.id, "ПОЗДРАВЛЯЕМ С ПОБЕДОЙ! 🎉")
             except Exception as e:
                 logging.error(f"Ошибка при отправке выигрышных эмодзи: {e}")
         else:
-            # Если не выпал 10% шанс, отправляем эмодзи проигрыша
+            # Если не выпал 10% шанс, отправляем эмодзи проигрыша (один символ)
             lose_emoji = '😢' # Эмодзи печального лица
             try:
-                bot.send_message(message.chat.id, lose_emoji * 3) # Отправим несколько
+                # bot.send_message(message.chat.id, lose_emoji * 3) # Отправим несколько
                 bot.send_message(message.chat.id, "Повезет в следующий раз!")
             except Exception as e:
                 logging.error(f"Ошибка при отправке проигрышных эмодзи: {e}")
     else:
-        # Отправляем эмодзи проигрыша при несовпадении символов
+        # Отправляем эмодзи проигрыша при несовпадении символов (один символ)
         lose_emoji = '😢' # Эмодзи печального лица
         try:
-            bot.send_message(message.chat.id, lose_emoji * 3) # Отправим несколько
+            # bot.send_message(message.chat.id, lose_emoji * 3) # Отправим несколько
             bot.send_message(message.chat.id, "Повезет в следующий раз!")
         except Exception as e:
             logging.error(f"Ошибка при отправке проигрышных эмодзи: {e}")
