@@ -1166,7 +1166,6 @@ async def ask_command(message: types.Message):
 
     # Отправляем сообщение о том, что бот думает, как ответ
     thinking_msg = await bot.reply_to(message, "Думаю...")
-    game['bot_message_ids'].append(thinking_msg.message_id) # Добавляем ID сообщения "Думаю..."
 
     client = None # Инициализируем client перед try
     try:
