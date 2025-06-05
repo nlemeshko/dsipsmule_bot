@@ -580,7 +580,7 @@ async def vote_command(message: types.Message):
             return
         
         nominee = args[2]
-        voter = message.from_user.username or f"id{message.from_user.id}"
+        voter = message.from_user.username or f"id{user_id}"
         
         # Читаем текущие данные
         hall_data = load_hall_data()
