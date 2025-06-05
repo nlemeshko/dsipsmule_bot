@@ -392,7 +392,7 @@ async def send_random_meme_command(message: types.Message):
             
             try:
                 # Пробуем отправить как фото
-                await bot.send_photo(message.chat.id, meme_url)
+                await bot.send_photo(message.chat.id, meme_url, reply_to_message_id=message.message_id) # Added reply_to_message_id
                 logging.info(f"Отправлен мем (Imgflip API): {meme_url}")
                 last_meme_time[user_id] = now # Обновляем время последнего запроса
             except Exception as e:
@@ -488,10 +488,16 @@ async def hall_command(message: types.Message):
         image_path = 'images/hall.png'
         if os.path.exists(image_path):
             with open(image_path, 'rb') as photo:
-                await bot.send_photo(message.chat.id, photo, caption=response_text)
-            logging.info(f"Картинка {image_path} отправлена для команды /hall.")
+                # Отправляем картинку с текстом в подписи как ответ на сообщение
+                await bot.send_photo(
+                    message.chat.id, 
+                    photo, 
+                    caption=response_text,
+                    reply_to_message_id=message.message_id # Добавляем reply_to_message_id
+                )
+            logging.info(f"Картинка {image_path} отправлена как ответ для команды /hall.")
         else:
-            logging.warning(f"Файл картинки {image_path} не найден для команды /hall. Отправляю только текст.")
+            logging.warning(f"Файл картинки {image_path} не найден для команды /hall. Отправляю только текст как ответ.")
             await bot.reply_to(message, response_text)
 
         logging.info(f"Номинация создана: {response_text}")
@@ -697,8 +703,8 @@ async def cat_command(message: types.Message):
         
         # Проверяем успешность запроса и тип контента (ожидаем изображение)
         if response.status_code == 200 and 'image' in response.headers.get('Content-Type', ''):
-            await bot.send_photo(message.chat.id, response.content)
-            logging.info(f"Изображение котика отправлено в чат {message.chat.id}")
+            await bot.send_photo(message.chat.id, response.content, reply_to_message_id=message.message_id) # Added reply_to_message_id
+            logging.info(f"Изображение котика отправлено в чат {message.chat.id} как ответ.")
             last_cat_time[user_id] = now # Обновляем время последнего запроса
         else:
             logging.error(f"Не удалось получить изображение котика. Статус: {response.status_code}, Content-Type: {response.headers.get('Content-Type')}")
@@ -725,14 +731,14 @@ async def casino_command(message: types.Message):
     # Обновляем время последнего запроса
     last_casino_time[user_id] = now
 
-    # Отправляем изображение казино
+    # Отправляем изображение казино как ответ на сообщение
     image_path = 'images/casino.png'
     if os.path.exists(image_path):
         with open(image_path, 'rb') as photo:
-            await bot.send_photo(message.chat.id, photo)
-        logging.info(f"Картинка {image_path} отправлена для команды /casino.")
+            await bot.send_photo(message.chat.id, photo, reply_to_message_id=message.message_id) # Added reply_to_message_id
+        logging.info(f"Картинка {image_path} отправлена для команды /casino как ответ.")
     else:
-        logging.warning(f"Файл картинки {image_path} не найден для команды /casino.")
+        logging.warning(f"Файл картинки {image_path} не найден для команды /casino. Отправляю только символы.")
 
     # Список стандартных символов для слотов (теперь все эмодзи)
     symbols = [
@@ -743,10 +749,10 @@ async def casino_command(message: types.Message):
     # Генерируем 3 случайных символа
     result_symbols = [random.choice(symbols) for _ in range(3)]
 
-    # Отправляем символы по очереди с задержкой
+    # Отправляем символы по очереди с задержкой как ответ на сообщение
     for symbol in result_symbols:
         try:
-            await bot.send_message(message.chat.id, symbol)
+            await bot.send_message(message.chat.id, symbol, reply_to_message_id=message.message_id) # Added reply_to_message_id
             time.sleep(1) # Задержка в 1 секунду между символами
         except Exception as e:
             logging.error(f"Ошибка при отправке символа казино {symbol}: {e}")
@@ -757,8 +763,8 @@ async def casino_command(message: types.Message):
         win_emoji = '🎉' # Эмодзи хлопушки
         try:
             # bot.send_message(message.chat.id, win_emoji * 5) # Отправим несколько для наглядности
-            await bot.send_message(message.chat.id, "ПОЗДРАВЛЯЕМ С ПОБЕДОЙ! 🎉")
-            await bot.send_message(message.chat.id, win_emoji)
+            await bot.send_message(message.chat.id, "ПОЗДРАВЛЯЕМ С ПОБЕДОЙ! 🎉", reply_to_message_id=message.message_id)
+            await bot.send_message(message.chat.id, win_emoji, reply_to_message_id=message.message_id)
         except Exception as e:
              logging.error(f"Ошибка при отправке выигрышных эмодзи: {e}")
     else:
@@ -766,8 +772,8 @@ async def casino_command(message: types.Message):
         lose_emoji = '😢' # Эмодзи печального лица
         try:
             # bot.send_message(message.chat.id, lose_emoji * 3) # Отправим несколько
-            await bot.send_message(message.chat.id, "Повезет в следующий раз!")
-            await bot.send_message(message.chat.id, lose_emoji)
+            await bot.send_message(message.chat.id, "Повезет в следующий раз!", reply_to_message_id=message.message_id)
+            await bot.send_message(message.chat.id, lose_emoji, reply_to_message_id=message.message_id)
         except Exception as e:
              logging.error(f"Ошибка при отправке проигрышных эмодзи: {e}")
 
@@ -830,16 +836,16 @@ async def pole_command(message: types.Message):
     pole_games[user_id] = game_state
     game = pole_games[user_id]
     
-    # Отправляем изображение поля чудес
+    # Отправляем изображение поля чудес как ответ на сообщение
     image_path = 'images/pole.png'
     if os.path.exists(image_path):
         with open(image_path, 'rb') as photo:
-            await bot.send_photo(message.chat.id, photo)
-        logging.info(f"Картинка {image_path} отправлена для команды /pole.")
+            await bot.send_photo(message.chat.id, photo, reply_to_message_id=message.message_id) # Added reply_to_message_id
+        logging.info(f"Картинка {image_path} отправлена для команды /pole как ответ.")
     else:
-        logging.warning(f"Файл картинки {image_path} не найден для команды /pole.")
+        logging.warning(f"Файл картинки {image_path} не найден для команды /pole. Отправляю только текст.")
 
-    # Отправляем начальное состояние
+    # Отправляем начальное состояние как ответ на сообщение
     word_display = display_word(game['word'], game['guessed_letters'])
     letters_display = display_available_letters(game['used_letters'])
 
@@ -918,10 +924,10 @@ async def handle_message(message: types.Message):
                         f"Игра окончена. Чтобы начать новую игру, используйте команду /pole"
                     )
                     del pole_games[user_id]
-                    # Отправляем голосовое сообщение победы
+                    # Отправляем голосовое сообщение победы как ответ на сообщение
                     try:
                         with open('pole/win.mp3', 'rb') as voice:
-                            await bot.send_voice(message.chat.id, voice)
+                            await bot.send_voice(message.chat.id, voice, reply_to_message_id=message.message_id) # Added reply_to_message_id
                         # Не добавляем ID победного сообщения в bot_message_ids, так как игра окончена
                         logging.info("Отправлено голосовое сообщение победы: pole/win.mp3")
                     except Exception as e:
@@ -958,10 +964,10 @@ async def handle_message(message: types.Message):
                             f"Игра окончена. Чтобы начать новую игру, используйте команду /pole"
                         )
                         del pole_games[user_id]
-                        # Отправляем голосовое сообщение победы
+                        # Отправляем голосовое сообщение победы как ответ на сообщение
                         try:
                             with open('pole/win.mp3', 'rb') as voice:
-                                await bot.send_voice(message.chat.id, voice)
+                                await bot.send_voice(message.chat.id, voice, reply_to_message_id=message.message_id) # Added reply_to_message_id
                             # Не добавляем ID победного сообщения в bot_message_ids, так как игра окончена
                             logging.info("Отправлено голосовое сообщение победы: pole/win.mp3")
                         except Exception as e:
@@ -1158,8 +1164,9 @@ async def ask_command(message: types.Message):
     question = ' '.join(message.text.split()[1:])
     logging.info(f"Получен вопрос для CharacterAI: {question}")
 
-    # Отправляем сообщение о том, что бот думает
+    # Отправляем сообщение о том, что бот думает, как ответ
     thinking_msg = await bot.reply_to(message, "Думаю...")
+    game['bot_message_ids'].append(thinking_msg.message_id) # Добавляем ID сообщения "Думаю..."
 
     client = None # Инициализируем client перед try
     try:
@@ -1201,22 +1208,22 @@ async def ask_command(message: types.Message):
             speech = await client.utils.generate_speech(chat_id, turn_id, primary_candidate_id, CHARACTER_VOICE_ID)
             logging.info("Голосовой ответ сгенерирован успешно.")
 
-            # Отправляем голосовое сообщение пользователю
+            # Отправляем голосовое сообщение пользователю как ответ
             logging.info("Отправляем голосовое сообщение пользователю...")
-            await bot.send_voice(message.chat.id, speech)
+            await bot.send_voice(message.chat.id, speech, reply_to_message_id=message.message_id) # Added reply_to_message_id
             logging.info("Голосовое сообщение отправлено успешно.")
 
-            # Отправляем изображение ask.png
+            # Отправляем изображение ask.png как ответ
             image_path = 'images/ask.png'
             if os.path.exists(image_path):
                 try:
                     with open(image_path, 'rb') as photo:
-                        await bot.send_photo(message.chat.id, photo)
-                    logging.info(f"Картинка {image_path} отправлена для команды /ask.")
+                        await bot.send_photo(message.chat.id, photo, reply_to_message_id=message.message_id) # Added reply_to_message_id
+                    logging.info(f"Картинка {image_path} отправлена для команды /ask как ответ.")
                 except Exception as e:
                     logging.error(f"Ошибка при отправке картинки {image_path} для команды /ask: {e}")
             else:
-                logging.warning(f"Файл картинки {image_path} не найден для команды /ask.")
+                logging.warning(f"Файл картинки {image_path} не найден для команды /ask. Отправляю только голосовой ответ.")
 
         except Exception as e:
             logging.error(f"[CharacterAI Interaction Error] Ошибка при работе с CharacterAI: {str(e)}")
@@ -1266,15 +1273,15 @@ async def proof_command(message: types.Message):
                     message.chat.id,
                     photo,
                     caption=response,
-                    reply_to_message_id=message.reply_to_message.message_id
+                    reply_to_message_id=message.message_id # Изменено на message.message_id
                 )
-            logging.info(f"Картинка {image_path} отправлена с ответом для команды /proof")
+            logging.info(f"Картинка {image_path} отправлена с ответом для команды /proof как ответ на сообщение команды.")
         else:
-            logging.warning(f"Файл картинки {image_path} не найден для команды /proof. Отправляю только текст.")
-            await bot.reply_to(message.reply_to_message, response)
+            logging.warning(f"Файл картинки {image_path} не найден для команды /proof. Отправляю только текст как ответ.")
+            await bot.reply_to(message, response) # Изменено на reply_to(message, ...)
     except Exception as e:
         logging.error(f"Ошибка при отправке картинки в команде /proof: {e}")
-        await bot.reply_to(message.reply_to_message, response)
+        await bot.reply_to(message, response) # Изменено на reply_to(message, ...)
 
 @bot.message_handler(commands=['roast'])
 async def roast_command(message: types.Message):
