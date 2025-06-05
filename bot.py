@@ -26,7 +26,7 @@ logging.basicConfig(
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 ALLOWED_GROUP_ID = int(os.getenv('ALLOWED_GROUP_ID'))
 CHARACTER_AI_TOKEN = os.getenv('CHARACTER_AI_TOKEN')
-CHARACTER_ID = "0A-obi-Y3tezNqaOb5nvYXTkRmM39O9g1qkQKooP8RU"
+CHARACTER_ID = "P5xPFx4UhFQ-jcbMRwofQBkXijxNSo6NOYbPHCT4auE"
 CHARACTER_VOICE_ID = "25726345-4858-4c38-99a7-0d5fc583ff5e"
 
 # Список админов для модерации (укажите user_id админов через запятую в .env)
