@@ -1253,11 +1253,11 @@ async def roast_command(message: types.Message):
     
     if message.reply_to_message:
         # Получаем никнейм пользователя, которого прожариваем (если это ответ на сообщение)
-        user_nick = message.reply_to_message.from_user.username or message.reply_to_message.from_user.first_name
+        user_nick = message.reply_to_message.from_user.first_name or message.reply_to_message.from_user.username
         reply_id = message.reply_to_message.message_id
     else:
         # Если это не ответ на сообщение, прожариваем пользователя, который ввел команду
-        user_nick = message.from_user.username or message.from_user.first_name
+        user_nick = message.from_user.first_name or message.from_user.username
         reply_id = message.message_id
 
     if not user_nick:
