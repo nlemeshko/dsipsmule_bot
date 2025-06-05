@@ -263,8 +263,6 @@ async def start(message: types.Message):
 @bot.callback_query_handler(func=lambda call: True)
 async def button_callback(call: types.CallbackQuery):
     logging.info(f"Callback query received: {call.data} from user {call.from_user.username or call.from_user.id} in chat {call.message.chat.id}")
-    if call.message.chat.type not in ['private']:
-        return
     logging.info(f"Кнопка: {call.data} от {call.from_user.username or call.from_user.id} в чате {call.message.chat.id}")
     await bot.answer_callback_query(call.id)
     user_id = call.from_user.id
@@ -412,11 +410,6 @@ async def send_random_meme_command(message: types.Message):
 @bot.message_handler(commands=['prediction'])
 async def vocal_predictor(message: types.Message):
     logging.info(f"Command /prediction received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
-    # Проверяем тип чата
-    if message.chat.type != 'private':
-        logging.info(f"Command /prediction received in group chat {message.chat.id}")
-        return
-
     logging.info(f"/prediction в чате {message.chat.id} от {message.from_user.username or message.from_user.id}")
     prediction = get_random_vocal_prediction()
     
