@@ -1260,17 +1260,22 @@ async def proof_command(message: types.Message):
 async def roast_command(message: types.Message):
     logging.info(f"Command /roast received from user {message.from_user.username or message.from_user.id} in chat {message.chat.id}")
     
-    if not message.reply_to_message:
-        await bot.reply_to(message, "Эта команда работает только в ответ на сообщение!")
-        return
-    
-    # Получаем никнейм пользователя, которого прожариваем
-    user_nick = message.reply_to_message.from_user.username or message.reply_to_message.from_user.first_name
-    
+    if message.reply_to_message:
+        # Получаем никнейм пользователя, которого прожариваем (если это ответ на сообщение)
+        user_nick = message.reply_to_message.from_user.username or message.reply_to_message.from_user.first_name
+        reply_id = message.reply_to_message.message_id
+    else:
+        # Если это не ответ на сообщение, прожариваем пользователя, который ввел команду
+        user_nick = message.from_user.username or message.from_user.first_name
+        reply_id = message.message_id
+
+    if not user_nick:
+        user_nick = "дорогой друг"
+
     # Выбираем случайный ответ и подставляем никнейм
     response = random.choice(roast_responses).format(user_nick=user_nick)
     
-    # Отправляем изображение и текст как ответ на исходное сообщение
+    # Отправляем изображение и текст как ответ на соответствующее сообщение
     try:
         image_path = 'roast.png'
         if os.path.exists(image_path):
@@ -1279,15 +1284,15 @@ async def roast_command(message: types.Message):
                     message.chat.id,
                     photo,
                     caption=response,
-                    reply_to_message_id=message.reply_to_message.message_id
+                    reply_to_message_id=reply_id
                 )
             logging.info(f"Картинка {image_path} отправлена с ответом для команды /roast")
         else:
             logging.warning(f"Файл картинки {image_path} не найден для команды /roast. Отправляю только текст.")
-            await bot.reply_to(message.reply_to_message, response)
+            await bot.send_message(message.chat.id, response, reply_to_message_id=reply_id)
     except Exception as e:
         logging.error(f"Ошибка при отправке картинки в команде /roast: {e}")
-        await bot.reply_to(message.reply_to_message, response)
+        await bot.send_message(message.chat.id, response, reply_to_message_id=reply_id)
 
 def main():
     """Основная функция запуска бота"""
