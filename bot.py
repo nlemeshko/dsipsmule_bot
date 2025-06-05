@@ -74,13 +74,7 @@ def send_random_voice(bot, chat_id, folder, prefix, count):
         
         if os.path.exists(voice_path):
             with open(voice_path, 'rb') as voice:
-                # Отправляем как аудио для автоматического воспроизведения
-                bot.send_audio(
-                    chat_id,
-                    voice,
-                    disable_notification=False,
-                    caption=None
-                )
+                bot.send_voice(chat_id, voice)
             logging.info(f"Отправлено голосовое сообщение: {voice_path}")
         else:
             logging.error(f"Файл голосового сообщения не найден: {voice_path}")
@@ -580,6 +574,15 @@ def casino_command(message: types.Message):
     # Обновляем время последнего запроса
     last_casino_time[user_id] = now
 
+    # Отправляем изображение казино
+    image_path = 'casino.png'
+    if os.path.exists(image_path):
+        with open(image_path, 'rb') as photo:
+            bot.send_photo(message.chat.id, photo)
+        logging.info(f"Картинка {image_path} отправлена для команды /casino.")
+    else:
+        logging.warning(f"Файл картинки {image_path} не найден для команды /casino.")
+
     # Список стандартных символов для слотов (теперь все эмодзи)
     symbols = [
         '🤞', # Эмодзи цифры 7
@@ -669,6 +672,15 @@ def pole_command(message: types.Message):
     # Создаем новую игру
     pole_games[user_id] = create_pole_game()
     game = pole_games[user_id]
+    
+    # Отправляем изображение поля чудес
+    image_path = 'pole.png'
+    if os.path.exists(image_path):
+        with open(image_path, 'rb') as photo:
+            bot.send_photo(message.chat.id, photo)
+        logging.info(f"Картинка {image_path} отправлена для команды /pole.")
+    else:
+        logging.warning(f"Файл картинки {image_path} не найден для команды /pole.")
     
     # Отправляем начальное состояние
     word_display = display_word(game['word'], game['guessed_letters'])
