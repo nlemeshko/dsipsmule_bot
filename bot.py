@@ -64,6 +64,23 @@ pole_words = [
     "кладовка", "чердак", "подвал", "фундамент", "крыльцо", "терраса", "веранда"
 ]
 
+# Функция для отправки случайного голосового сообщения
+def send_random_voice(bot, chat_id, folder, prefix, count):
+    try:
+        # Выбираем случайный номер
+        number = random.randint(1, count)
+        # Формируем путь к файлу
+        voice_path = f"{folder}/{prefix}_{number}.mp3"
+        
+        if os.path.exists(voice_path):
+            with open(voice_path, 'rb') as voice:
+                bot.send_voice(chat_id, voice)
+            logging.info(f"Отправлено голосовое сообщение: {voice_path}")
+        else:
+            logging.error(f"Файл голосового сообщения не найден: {voice_path}")
+    except Exception as e:
+        logging.error(f"Ошибка при отправке голосового сообщения: {e}")
+
 # Функция для создания начального состояния игры
 def create_pole_game():
     word = random.choice(pole_words)
@@ -659,6 +676,8 @@ def pole_command(message: types.Message):
     )
     
     bot.reply_to(message, response, parse_mode='HTML')
+    # Отправляем случайное голосовое сообщение ожидания
+    send_random_voice(bot, message.chat.id, 'pole', 'wait', 3)
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message: types.Message):
@@ -682,19 +701,29 @@ def handle_message(message: types.Message):
                     f"Игра окончена. Чтобы начать новую игру, используйте команду /pole"
                 )
                 del pole_games[user_id]
+                # Отправляем голосовое сообщение победы
+                send_random_voice(bot, message.chat.id, 'pole', 'win', 1)
             else:
                 response = "❌ Неверное слово! Продолжайте угадывать буквы."
+                # Отправляем случайное голосовое сообщение неверного ответа
+                send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
         # Если пользователь пытается угадать букву
         elif len(guess) == 1 and guess.isalpha():
             if guess in game['used_letters']:
                 response = "Эта буква уже была использована!"
+                # Отправляем случайное голосовое сообщение неверного ответа
+                send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
             else:
                 game['used_letters'].add(guess)
                 if guess in game['word']:
                     game['guessed_letters'].add(guess)
                     response = "✅ Верно! Буква есть в слове."
+                    # Отправляем случайное голосовое сообщение верного ответа
+                    send_random_voice(bot, message.chat.id, 'pole', 'yes', 3)
                 else:
                     response = "❌ Неверно! Такой буквы нет в слове."
+                    # Отправляем случайное голосовое сообщение неверного ответа
+                    send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
                 
                 # Проверяем, угадано ли всё слово
                 if all(letter in game['guessed_letters'] for letter in game['word']):
@@ -703,6 +732,8 @@ def handle_message(message: types.Message):
                         f"Игра окончена. Чтобы начать новую игру, используйте команду /pole"
                     )
                     del pole_games[user_id]
+                    # Отправляем голосовое сообщение победы
+                    send_random_voice(bot, message.chat.id, 'pole', 'win', 1)
                 else:
                     # Показываем текущее состояние игры
                     word_display = display_word(game['word'], game['guessed_letters'])
@@ -710,6 +741,8 @@ def handle_message(message: types.Message):
                     response += f"\n\nСлово: {word_display}\n\nДоступные буквы:\n{letters_display}"
         else:
             response = "Пожалуйста, отправьте одну букву или попробуйте угадать слово целиком."
+            # Отправляем случайное голосовое сообщение неверного ответа
+            send_random_voice(bot, message.chat.id, 'pole', 'no', 3)
         
         bot.reply_to(message, response, parse_mode='HTML')
         return
