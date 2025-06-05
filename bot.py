@@ -35,23 +35,16 @@ SONG_STATE = 'song_waiting_text'
 RATE_LINK_STATE = 'rate_waiting_link'
 SONG_DAY_STATE = 'song_day_cooldown'
 PROMOTE_STATE = 'promote_waiting_link'
+
+# Словари для отслеживания времени последнего запроса по командам
 last_song_day_time = {}
+last_russong_time = {}
+last_cat_time = {}
+last_meme_time = {}
+last_casino_time = {}
 
 # Временное хранилище для запросов на промо перед модерацией
 pending_promotions = {}
-
-# Добавляем словарь для отслеживания времени последнего запроса
-last_russong_time = {}
-
-# Получение Client-ID Imgur из переменных окружения
-IMGUR_CLIENT_ID = os.getenv('IMGUR_CLIENT_ID')
-
-# Добавляем словари для отслеживания времени последнего запроса для /cat и /meme
-last_cat_time = {}
-last_meme_time = {}
-
-# Добавляем словарь для отслеживания времени последнего запроса для /casino
-last_casino_time = {}
 
 # Добавляем словарь для отслеживания состояния игры в "Поле чудес"
 pole_games = {}
@@ -63,6 +56,9 @@ pole_words = [
     "бассейн", "спортзал", "кухня", "ванная", "спальня", "гостиная", "коридор",
     "кладовка", "чердак", "подвал", "фундамент", "крыльцо", "терраса", "веранда"
 ]
+
+# Получение Client-ID Imgur из переменных окружения
+IMGUR_CLIENT_ID = os.getenv('IMGUR_CLIENT_ID')
 
 # Функция для отправки случайного голосового сообщения
 def send_random_voice(bot, chat_id, folder, prefix, count):
@@ -823,6 +819,73 @@ def handle_message(message: types.Message):
             logging.info(f"Анонимка от {user_id} отправлена на модерацию")
             bot.reply_to(message, "Спасибо! Ваша анонимка отправлена на модерацию.")
             user_states.pop(user_id, None)
+            return
+
+    # FSM: если пользователь предлагает песню
+    elif user_states.get(user_id) == SONG_STATE:
+        logging.info(f"Пользователь {user_id} в SONG_STATE. Обработка сообщения.")
+        song_info = message.text.strip()
+        if song_info:
+            user_info = message.from_user.username or f"id{user_id}"
+            message_to_admin = f"Новая песня предложена от @{user_info}:\n{song_info}"
+            for admin_id in ADMIN_IDS:
+                bot.send_message(admin_id, message_to_admin)
+            logging.info(f"Песня от {user_id} отправлена админам: {song_info}")
+            bot.reply_to(message, "Спасибо! Ваша песня отправлена администраторам.")
+            user_states.pop(user_id, None)
+            return
+        else:
+            bot.reply_to(message, "Пожалуйста, отправьте название или ссылку на песню.")
+            return
+
+    # FSM: если пользователь отправляет ссылку для оценки
+    elif user_states.get(user_id) == RATE_LINK_STATE:
+        logging.info(f"Пользователь {user_id} в RATE_LINK_STATE. Обработка сообщения.")
+        rate_link = message.text.strip()
+        if rate_link:
+            user_info = message.from_user.username or f"id{user_id}"
+            message_to_admin = f"Новая ссылка для оценки от @{user_info}:\n{rate_link}"
+            for admin_id in ADMIN_IDS:
+                bot.send_message(admin_id, message_to_admin)
+            logging.info(f"Ссылка для оценки от {user_id} отправлена админам: {rate_link}")
+            bot.reply_to(message, "Спасибо! Ваша ссылка отправлена администраторам для оценки.")
+            user_states.pop(user_id, None)
+            return
+        else:
+            bot.reply_to(message, "Пожалуйста, отправьте ссылку на трек для оценки.")
+            return
+            
+    # FSM: если пользователь отправляет ссылку для промо
+    elif user_states.get(user_id) == PROMOTE_STATE:
+        logging.info(f"Пользователь {user_id} в PROMOTE_STATE. Обработка сообщения.")
+        promote_link = message.text.strip()
+        if promote_link:
+            user_info = message.from_user.username or f"id{user_id}"
+            # Сохраняем промо запрос перед модерацией
+            promotion_id = str(uuid.uuid4()) # Генерируем уникальный ID
+            pending_promotions[promotion_id] = {
+                'user_id': user_id,
+                'username': user_info,
+                'link': promote_link,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # Формируем сообщение для админов с кнопками модерации
+            keyboard = types.InlineKeyboardMarkup(row_width=2)
+            keyboard.add(
+                types.InlineKeyboardButton("✅ Одобрить", callback_data=f"approve_promo_{promotion_id}"),
+                types.InlineKeyboardButton("❌ Отклонить", callback_data=f"reject_promo_{promotion_id}")
+            )
+            message_to_admin = f"Новый запрос на промо от @{user_info}:\n{promote_link}"
+            for admin_id in ADMIN_IDS:
+                bot.send_message(admin_id, message_to_admin, reply_markup=keyboard)
+                
+            logging.info(f"Промо запрос от {user_id} отправлен админам на модерацию: {promote_link}")
+            bot.reply_to(message, "Спасибо! Ваш запрос на промо отправлен на модерацию.")
+            user_states.pop(user_id, None)
+            return
+        else:
+            bot.reply_to(message, "Пожалуйста, отправьте ссылку на трек для промо.")
             return
 
 @bot.message_handler(content_types=['photo'])
