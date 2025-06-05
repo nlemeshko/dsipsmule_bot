@@ -554,24 +554,27 @@ def casino_command(message: types.Message):
             try:
                 # bot.send_message(message.chat.id, win_emoji * 5) # Отправим несколько для наглядности
                 bot.send_message(message.chat.id, "ПОЗДРАВЛЯЕМ С ПОБЕДОЙ! 🎉")
+                bot.send_message(message.chat.id, win_emoji)
             except Exception as e:
-                logging.error(f"Ошибка при отправке выигрышных эмодзи: {e}")
+                 logging.error(f"Ошибка при отправке выигрышных эмодзи: {e}")
         else:
             # Если не выпал 10% шанс, отправляем эмодзи проигрыша (один символ)
             lose_emoji = '😢' # Эмодзи печального лица
             try:
                 # bot.send_message(message.chat.id, lose_emoji * 3) # Отправим несколько
                 bot.send_message(message.chat.id, "Повезет в следующий раз!")
+                bot.send_message(message.chat.id, lose_emoji)
             except Exception as e:
-                logging.error(f"Ошибка при отправке проигрышных эмодзи: {e}")
+                 logging.error(f"Ошибка при отправке проигрышных эмодзи: {e}")
     else:
         # Отправляем эмодзи проигрыша при несовпадении символов (один символ)
         lose_emoji = '😢' # Эмодзи печального лица
         try:
             # bot.send_message(message.chat.id, lose_emoji * 3) # Отправим несколько
             bot.send_message(message.chat.id, "Повезет в следующий раз!")
+            bot.send_message(message.chat.id, lose_emoji)
         except Exception as e:
-            logging.error(f"Ошибка при отправке проигрышных эмодзи: {e}")
+             logging.error(f"Ошибка при отправке проигрышных эмодзи: {e}")
 
 @bot.message_handler(commands=['help'])
 def help_command(message: types.Message):
