@@ -74,7 +74,13 @@ def send_random_voice(bot, chat_id, folder, prefix, count):
         
         if os.path.exists(voice_path):
             with open(voice_path, 'rb') as voice:
-                bot.send_voice(chat_id, voice)
+                # Отправляем как аудио для автоматического воспроизведения
+                bot.send_audio(
+                    chat_id,
+                    voice,
+                    disable_notification=False,
+                    caption=None
+                )
             logging.info(f"Отправлено голосовое сообщение: {voice_path}")
         else:
             logging.error(f"Файл голосового сообщения не найден: {voice_path}")
