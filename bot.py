@@ -952,8 +952,8 @@ async def ask_command(message: types.Message):
     user_id = message.from_user.id
     now = time.time()
 
-    # Проверяем ограничение на частоту запросов для /ask (60 секунд)
-    if user_id in last_ask_time and now - last_ask_time[user_id] < 60:
+    # Проверяем ограничение на частоту запросов для /ask (10 секунд)
+    if user_id in last_ask_time and now - last_ask_time[user_id] < 10:
         remaining_time = int(60 - (now - last_ask_time[user_id]))
         await bot.reply_to(message, f"⏳ Подождите {remaining_time} секунд перед следующим вопросом.")
         return
