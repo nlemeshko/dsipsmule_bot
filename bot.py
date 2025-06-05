@@ -1253,12 +1253,13 @@ async def proof_command(message: types.Message):
         await bot.reply_to(message, "Эта команда работает только в ответ на сообщение!")
         return
     
-    # Получаем текст сообщения, на которое отвечаем
+    # Получаем текст сообщения, на которое отвечаем (теперь не обязательно для работы команды)
     replied_text = message.reply_to_message.text or message.reply_to_message.caption or ""
     
-    if not replied_text:
-        await bot.reply_to(message, "Я могу оценить только текстовые сообщения!")
-        return
+    # Убираем проверку на наличие текста в отвеченном сообщении
+    # if not replied_text:
+    #     await bot.reply_to(message, "Я могу оценить только текстовые сообщения!")
+    #     return
     
     # Выбираем случайный ответ
     response = random.choice(proof_agree_responses + proof_disagree_responses + proof_unsure_responses)
