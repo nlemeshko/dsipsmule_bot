@@ -1,7 +1,3 @@
-# OS
-.DS_Store
-Thumbs.db
-
 # Python caches
 __pycache__/
 *.py[cod]
@@ -17,21 +13,16 @@ venv/
 .env
 .env.*
 
-# Editors/IDE
+# Git
+.git/
+.gitignore
+
+# IDE
 .vscode/
 .idea/
-*.swp
 
-# Logs
-logs/
+# Others
 *.log
-
-# Pip
-pip-wheel-metadata/
-
-# Coverage
-coverage.xml
-htmlcov/
-
-# Misc
-*.sqlite3
+logs/
+README.md
+old/

@@ -1,0 +1,101 @@
+# Default values for smule-bot
+# This is a YAML-formatted file.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/nlemeshko/dsipsmule_bot
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: 
+  - name: regcred
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  fsGroup: 10001
+
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 10001
+  allowPrivilegeEscalation: false
+
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: smule-bot.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Использование существующего секрета
+existingSecret:
+  name: "env"  # Имя вашего существующего секрета
+  keys: {}     # Дополнительные переменные (опционально)
+
+# Environment variables (fallback, если не используется existingSecret)
+env:
+  # Required variables
+  BOT_TOKEN: ""
+  
+  # Optional variables
+  ADMINS: ""
+  CHARACTER_AI_TOKEN: ""
+  CHARACTER_ID: ""
+  CHARACTER_VOICE_ID: ""
+  TZ: "Europe/Kyiv"
+
+# Persistent Volume settings
+persistence:
+  enabled: false
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 1Gi
+  annotations: {}
+
+# ConfigMap is not used by default
+configMap:
+  create: false
+  name: ""
+
+# Secret for sensitive environment variables
+secret:
+  create: true
+  name: ""
+  sensitiveVars:
+    - BOT_TOKEN

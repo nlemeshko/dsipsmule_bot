@@ -1,0 +1,61 @@
+# Пример конфигурации для smule-bot (Telegram бот)
+# Скопируйте этот файл в values.yaml и заполните ваши значения
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/nlemeshko/dsipsmule_bot
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+# Секреты для загрузки образов
+imagePullSecrets: 
+  - name: regcred
+
+# Использование существующего секрета (рекомендуется)
+existingSecret:
+  name: "env"  # Имя вашего существующего секрета в Kubernetes
+  keys: {}     # Дополнительные переменные (опционально)
+
+# Переменные окружения (fallback, если не используется existingSecret)
+env:
+  # ОБЯЗАТЕЛЬНЫЕ ПЕРЕМЕННЫЕ - заполните эти значения
+  BOT_TOKEN: "YOUR_TELEGRAM_BOT_TOKEN_HERE"
+  
+  # ОПЦИОНАЛЬНЫЕ ПЕРЕМЕННЫЕ
+  ADMINS: "123456789,987654321"
+  CHARACTER_AI_TOKEN: ""
+  CHARACTER_ID: ""
+  CHARACTER_VOICE_ID: ""
+  TZ: "Europe/Kyiv"
+
+
+# Настройки PersistentVolume
+persistence:
+  enabled: false
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 1Gi
+  annotations: {}
+
+# Ресурсы
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Безопасность
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 10001
+  allowPrivilegeEscalation: false
+
+podSecurityContext:
+  fsGroup: 10001
