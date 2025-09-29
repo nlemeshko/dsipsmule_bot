@@ -1,6 +1,6 @@
 apiVersion: v2
-name: smule-followers
-description: A Helm chart for Smule Followers Bot
+name: smule-bot
+description: A Helm chart for Smule Telegram Bot
 type: application
 version: 0.1.0
 appVersion: "1.0.0"
@@ -9,9 +9,9 @@ keywords:
   - bot
   - smule
   - monitoring
-home: https://github.com/nlemeshko/smule-followers
+home: https://github.com/nlemeshko/dsipsmule-bot
 sources:
-  - https://github.com/nlemeshko/smule-followers
+  - https://github.com/nlemeshko/dsipsmule-bot
 maintainers:
   - name: nlemeshko
     email: nlemeshko@example.com

@@ -2,9 +2,9 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "smule-followers.fullname" . }}-config
+  name: {{ include "smule-bot.fullname" . }}-config
   labels:
-    {{- include "smule-followers.labels" . | nindent 4 }}
+    {{- include "smule-bot.labels" . | nindent 4 }}
 data:
   {{- if .Values.env.TZ }}
   TZ: {{ .Values.env.TZ | quote }}
