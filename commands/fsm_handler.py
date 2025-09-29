@@ -18,6 +18,7 @@ async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """Обработчик FSM состояний"""
     user_id = update.effective_user.id
     chat_type = update.effective_chat.type
+    msg = update.effective_message
     
     # Проверяем, что это личное сообщение
     if chat_type != "private":
@@ -26,74 +27,75 @@ async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # FSM: если пользователь пишет анонимку
     if user_states.get(user_id) == ANON_STATE:
         print(f"Пользователь {user_id} в ANON_STATE. Проверка типа сообщения.")
-        if update.message.text:
+        if msg and msg.text:
             # Обработка текстовых сообщений
-            text = update.message.text.strip()
+            text = msg.text.strip()
             anon_text = f"{text}\n\n#анон"
             user_info = f"@{update.effective_user.username}" if update.effective_user.username else f"ID{user_id}"
             
             # Отправляем админам на модерацию
             await send_moderation_request(context, "анонимка", user_info, anon_text)
             print(f"Новая анонимка на модерацию от {user_info}:\n{anon_text}")
-            await update.message.reply_text("Спасибо! Ваша анонимка отправлена на модерацию.")
+            await msg.reply_text("Спасибо! Ваша анонимка отправлена на модерацию.")
             user_states.pop(user_id, None)
             return
 
     # FSM: если пользователь предлагает песню
     elif user_states.get(user_id) == SONG_STATE:
         print(f"Пользователь {user_id} в SONG_STATE. Обработка сообщения.")
-        song_info = update.message.text.strip()
+        song_info = msg.text.strip() if (msg and msg.text) else ""
         if song_info:
             user_info = f"@{update.effective_user.username}" if update.effective_user.username else f"ID{user_id}"
             
             # Отправляем админам на модерацию
             await send_moderation_request(context, "песня", user_info, song_info)
             print(f"Новая песня предложена от {user_info}:\n{song_info}")
-            await update.message.reply_text("Спасибо! Ваша песня отправлена администраторам.")
+            await msg.reply_text("Спасибо! Ваша песня отправлена администраторам.")
             user_states.pop(user_id, None)
             return
         else:
-            await update.message.reply_text("Пожалуйста, отправьте название или ссылку на песню.")
+            await msg.reply_text("Пожалуйста, отправьте название или ссылку на песню.")
             return
             
     # FSM: если пользователь отправляет ссылку для оценки
     elif user_states.get(user_id) == RATE_LINK_STATE:
         print(f"Пользователь {user_id} в RATE_LINK_STATE. Обработка сообщения.")
-        rate_link = update.message.text.strip()
+        rate_link = msg.text.strip() if (msg and msg.text) else ""
         if rate_link:
             user_info = f"@{update.effective_user.username}" if update.effective_user.username else f"ID{user_id}"
             
             # Отправляем админам на модерацию
             await send_moderation_request(context, "оценка", user_info, rate_link)
             print(f"Новая ссылка для оценки от {user_info}:\n{rate_link}")
-            await update.message.reply_text("Спасибо! Ваша ссылка отправлена администраторам для оценки.")
+            await msg.reply_text("Спасибо! Ваша ссылка отправлена администраторам для оценки.")
             user_states.pop(user_id, None)
             return
         else:
-            await update.message.reply_text("Пожалуйста, отправьте ссылку на трек для оценки.")
+            await msg.reply_text("Пожалуйста, отправьте ссылку на трек для оценки.")
             return
             
     # FSM: если пользователь отправляет ссылку для промо
     elif user_states.get(user_id) == PROMOTE_STATE:
         print(f"Пользователь {user_id} в PROMOTE_STATE. Обработка сообщения.")
-        promote_link = update.message.text.strip()
+        promote_link = msg.text.strip() if (msg and msg.text) else ""
         if promote_link:
             user_info = f"@{update.effective_user.username}" if update.effective_user.username else f"ID{user_id}"
             
             # Отправляем админам на модерацию
             await send_moderation_request(context, "промо", user_info, promote_link)
             print(f"Новый запрос на промо от {user_info}:\n{promote_link}")
-            await update.message.reply_text("Спасибо! Ваш запрос на промо отправлен на модерацию.")
+            await msg.reply_text("Спасибо! Ваш запрос на промо отправлен на модерацию.")
             user_states.pop(user_id, None)
             return
         else:
-            await update.message.reply_text("Пожалуйста, отправьте ссылку на трек для промо.")
+            await msg.reply_text("Пожалуйста, отправьте ссылку на трек для промо.")
             return
 
 async def handle_anon_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик анонимных фотографий"""
     user_id = update.effective_user.id
     chat_type = update.effective_chat.type
+    msg = update.effective_message
     
     if chat_type != "private":
         return
@@ -101,18 +103,20 @@ async def handle_anon_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_states.get(user_id) == ANON_STATE:
         print(f"Получена фотография от {user_id} в ANON_STATE.")
         # Обработка фотографий
-        photo_id = update.message.photo[-1].file_id  # Берем последнюю (самую большую) версию фото
-        caption = update.message.caption or ""
+        photo_id = (msg.photo[-1].file_id if (msg and msg.photo) else None)  # Берем последнюю (самую большую) версию фото
+        caption = (msg.caption or "") if msg else ""
         user_info = f"@{update.effective_user.username}" if update.effective_user.username else f"ID{user_id}"
         
         try:
             # Отправляем админам на модерацию
-            await send_anon_with_photo(context, user_info, photo_id, caption)
+            if photo_id:
+                await send_anon_with_photo(context, user_info, photo_id, caption)
             print(f"Анонимная фотография от {user_info} успешно отправлена на модерацию")
-            await update.message.reply_text("Спасибо! Ваша анонимная фотография отправлена на модерацию.")
+            await msg.reply_text("Спасибо! Ваша анонимная фотография отправлена на модерацию.")
         except Exception as e:
             print(f"Ошибка при отправке фото админам: {e}")
-            await update.message.reply_text("Произошла ошибка при отправке фотографии. Попробуйте еще раз.")
+            if msg:
+                await msg.reply_text("Произошла ошибка при отправке фотографии. Попробуйте еще раз.")
         user_states.pop(user_id, None)
         return
 
@@ -120,6 +124,7 @@ async def handle_anon_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик анонимных голосовых сообщений"""
     user_id = update.effective_user.id
     chat_type = update.effective_chat.type
+    msg = update.effective_message
     
     if chat_type != "private":
         return
@@ -127,17 +132,19 @@ async def handle_anon_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_states.get(user_id) == ANON_STATE:
         print(f"Получено голосовое сообщение от {user_id} в ANON_STATE.")
         # Обработка голосовых сообщений
-        voice_id = update.message.voice.file_id
-        caption = update.message.caption or ""
+        voice_id = msg.voice.file_id if (msg and msg.voice) else None
+        caption = (msg.caption or "") if msg else ""
         user_info = f"@{update.effective_user.username}" if update.effective_user.username else f"ID{user_id}"
         
         try:
             # Отправляем админам на модерацию
-            await send_anon_with_voice(context, user_info, voice_id, caption)
+            if voice_id:
+                await send_anon_with_voice(context, user_info, voice_id, caption)
             print(f"Анонимное голосовое сообщение от {user_info} успешно отправлено на модерацию")
-            await update.message.reply_text("Спасибо! Ваше анонимное голосовое сообщение отправлено на модерацию.")
+            await msg.reply_text("Спасибо! Ваше анонимное голосовое сообщение отправлено на модерацию.")
         except Exception as e:
             print(f"Ошибка при отправке голосового сообщения админам: {e}")
-            await update.message.reply_text("Произошла ошибка при отправке голосового сообщения. Попробуйте еще раз.")
+            if msg:
+                await msg.reply_text("Произошла ошибка при отправке голосового сообщения. Попробуйте еще раз.")
         user_states.pop(user_id, None)
         return

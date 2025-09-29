@@ -24,13 +24,17 @@ PERSONAL_RESPONSES = [
 
 async def handle_personal_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик личных сообщений"""
-    user_message = update.message.text.lower()
+    msg = update.effective_message
+    if not msg or not msg.text:
+        return
+    user_message = msg.text.lower()
     user_name = update.effective_user.first_name
     
     # Проверяем, идет ли сейчас игра "Поле чудес" для этого пользователя
     from commands.pole import pole_games
     user_id = update.effective_user.id
-    chat_id = update.message.chat.id
+    chat = update.effective_chat
+    chat_id = chat.id if chat else None
     
     if user_id in pole_games and pole_games[user_id]['chat_id'] == chat_id:
         # Если игра активна, передаем управление обработчику игры
@@ -71,4 +75,4 @@ async def handle_personal_message(update: Update, context: ContextTypes.DEFAULT_
         # Случайный ответ, если не найдено ключевых слов
         response = random.choice(PERSONAL_RESPONSES)
     
-    await update.message.reply_text(response)
+        await msg.reply_text(response)

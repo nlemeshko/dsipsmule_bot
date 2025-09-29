@@ -72,7 +72,9 @@ def display_available_letters(used_letters):
 
 async def pole_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /pole"""
-    chat_id = update.message.chat.id
+    msg = update.effective_message
+    chat = update.effective_chat
+    chat_id = chat.id if chat else None
     user_id = update.effective_user.id
     chat_type = update.effective_chat.type
     
@@ -98,7 +100,8 @@ async def pole_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     image_path = 'images/pole.png'
     if os.path.exists(image_path):
         with open(image_path, 'rb') as photo:
-            await update.message.reply_photo(photo, reply_to_message_id=update.message.message_id)
+            if msg:
+                await msg.reply_photo(photo, reply_to_message_id=msg.message_id)
         print(f"Картинка {image_path} отправлена для команды /pole как ответ.")
     else:
         print(f"Файл картинки {image_path} не найден для команды /pole. Отправляю только текст.")
@@ -115,10 +118,11 @@ async def pole_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     # Отправляем сообщение в ответ на команду и сохраняем его message_id как initial_message_id
-    initial_message = await update.message.reply_text(response, parse_mode='HTML')
-    pole_games[user_id]['bot_message_ids'].append(initial_message.message_id) # Добавляем ID первого сообщения
-    pole_games[user_id]['initial_message_id'] = initial_message.message_id
-    print(f"Для пользователя {user_id} в чате {chat_id} сохранена initial_message_id: {initial_message.message_id}")
+    initial_message = await msg.reply_text(response, parse_mode='HTML') if msg else None
+    if initial_message:
+        pole_games[user_id]['bot_message_ids'].append(initial_message.message_id) # Добавляем ID первого сообщения
+        pole_games[user_id]['initial_message_id'] = initial_message.message_id
+        print(f"Для пользователя {user_id} в чате {chat_id} сохранена initial_message_id: {initial_message.message_id}")
 
     # Отправляем случайное голосовое сообщение ожидания
     await send_random_voice(context.bot, chat_id, 'pole', 'wait', 3)
@@ -126,7 +130,11 @@ async def pole_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_pole_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка сообщений в игре Поле чудес"""
     user_id = update.effective_user.id
-    chat_id = update.message.chat.id
+    msg = update.effective_message
+    chat = update.effective_chat
+    if not chat or not msg:
+        return
+    chat_id = chat.id
     
     # Debug removed
     
@@ -145,17 +153,17 @@ async def handle_pole_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     game = active_game
 
-    guess = update.message.text.lower().strip() if update.message.text else ''
+    guess = msg.text.lower().strip() if (msg and msg.text) else ''
     print(f"Обрабатываем как ход в Поле чудес. Угадывание: {guess}")
 
     # Если guess пустой после обрезки
     if not guess:
         response = "Пожалуйста, введите букву или слово для угадывания."
-        await update.message.reply_text(response)
+        await msg.reply_text(response)
         return # Выходим, не обрабатывая пустой ввод
 
     # Отправляем сообщение о том, что бот думает
-    thinking_msg = await update.message.reply_text("🤔 Думаю...")
+    thinking_msg = await msg.reply_text("🤔 Думаю...")
     game['bot_message_ids'].append(thinking_msg.message_id) # Добавляем ID сообщения "Думаю..."
     
     # Добавляем небольшую задержку для имитации "раздумий"
@@ -172,7 +180,7 @@ async def handle_pole_message(update: Update, context: ContextTypes.DEFAULT_TYPE
             # Отправляем голосовое сообщение победы как ответ на сообщение
             try:
                 with open('pole/win.mp3', 'rb') as voice:
-                    await context.bot.send_voice(chat_id, voice, reply_to_message_id=update.message.message_id)
+                    await context.bot.send_voice(chat_id, voice, reply_to_message_id=msg.message_id)
                 print("Отправлено голосовое сообщение победы: pole/win.mp3")
             except Exception as e:
                 print(f"Ошибка при отправке голосового сообщения победы: {e}")
@@ -208,7 +216,7 @@ async def handle_pole_message(update: Update, context: ContextTypes.DEFAULT_TYPE
                 # Отправляем голосовое сообщение победы как ответ на сообщение
                 try:
                     with open('pole/win.mp3', 'rb') as voice:
-                        await context.bot.send_voice(chat_id, voice, reply_to_message_id=update.message.message_id)
+                        await context.bot.send_voice(chat_id, voice, reply_to_message_id=msg.message_id)
                     print("Отправлено голосовое сообщение победы: pole/win.mp3")
                 except Exception as e:
                     print(f"Ошибка при отправке голосового сообщения победы: {e}")
@@ -226,5 +234,5 @@ async def handle_pole_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     await context.bot.delete_message(chat_id, thinking_msg.message_id)
     
     # Отправляем ответ
-    response_message = await update.message.reply_text(response, parse_mode='HTML')
+    response_message = await msg.reply_text(response, parse_mode='HTML')
     game['bot_message_ids'].append(response_message.message_id) # Добавляем ID ответного сообщения
