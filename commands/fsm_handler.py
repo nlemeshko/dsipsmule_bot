@@ -4,6 +4,9 @@
 Обработчик FSM состояний для анонимок, песен, оценок и промо
 """
 
+import asyncio
+import logging
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -15,7 +18,6 @@ from commands.callback_handler import (
     RATE_LINK_STATE,
     PROMOTE_STATE,
     NASSAL_NAMES_STATE,
-    NASSAL_SMULE_NICK_STATE,
     NASSAL_AVATAR_STATE,
     NASSAL_CATEGORY_STATE,
     NASSAL_CONFIRM_STATE,
@@ -31,7 +33,6 @@ from commands.admin_notifications import (
 )
 from commands.nassal2026 import (
     NASSAL_BASKETS,
-    NASSAL_SMULE_TEXT,
     NASSAL_AVATAR_TEXT,
     YES_ANSWERS,
     NO_ANSWERS,
@@ -40,6 +41,14 @@ from commands.nassal2026 import (
     send_registration_summary,
     send_success_message,
 )
+from storage.s3_registry import (
+    append_registration_row,
+    build_registration_row,
+    load_registration_rows,
+)
+
+
+logger = logging.getLogger(__name__)
 
 async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик FSM состояний"""
@@ -76,18 +85,6 @@ async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
         context.user_data["nassal_registration"] = {
             "participants": participants,
         }
-        user_states[user_id] = NASSAL_SMULE_NICK_STATE
-        await msg.reply_text(NASSAL_SMULE_TEXT, parse_mode='HTML')
-        return
-
-    elif user_states.get(user_id) == NASSAL_SMULE_NICK_STATE:
-        smule_nick = msg.text.strip() if (msg and msg.text) else ""
-        if not smule_nick:
-            await msg.reply_text("Пожалуйста, напишите ник в Smule текстом.")
-            return
-
-        registration = context.user_data.setdefault("nassal_registration", {})
-        registration["smule_nick"] = smule_nick
         user_states[user_id] = NASSAL_AVATAR_STATE
         await msg.reply_text(NASSAL_AVATAR_TEXT, parse_mode='HTML')
         return
@@ -121,13 +118,13 @@ async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
             registration = context.user_data.get("nassal_registration", {})
             user_info = f"@{update.effective_user.username}" if update.effective_user.username else f"ID{user_id}"
             full_name = update.effective_user.full_name or "Без имени"
-            basket_full_name = get_basket_full_name(registration["category_choice"])
+            category_choice = registration["category_choice"]
+            basket_full_name = get_basket_full_name(category_choice)
             admin_message = (
                 "🏆 <b>Новая регистрация на конкурс NASSAL2026</b>\n\n"
                 f"<b>Telegram:</b> {user_info}\n"
                 f"<b>Имя в Telegram:</b> {full_name}\n"
                 f"<b>Участник(и):</b> {registration['participants']}\n"
-                f"<b>Smule nick:</b> {registration['smule_nick']}\n"
                 f"<b>Корзина:</b> {basket_full_name}"
             )
 
@@ -137,7 +134,23 @@ async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
             else:
                 await send_to_admins(context, admin_message)
 
-            await send_success_message(context, msg.chat_id)
+            s3_row = build_registration_row(
+                user_id=user_id,
+                username=update.effective_user.username,
+                full_name=update.effective_user.full_name,
+                participants=registration["participants"],
+                category_code=category_choice,
+                category_name=basket_full_name,
+                avatar_file_id=avatar_file_id,
+            )
+            registrations = None
+            try:
+                await asyncio.to_thread(append_registration_row, s3_row)
+                registrations = await asyncio.to_thread(load_registration_rows)
+            except Exception as exc:
+                logger.exception("Не удалось сохранить регистрацию в Object Storage: %s", exc)
+
+            await send_success_message(context, msg.chat_id, registrations=registrations)
             context.user_data.pop("nassal_registration", None)
             user_states.pop(user_id, None)
             return

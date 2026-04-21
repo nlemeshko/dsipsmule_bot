@@ -4,6 +4,8 @@
 Регистрация на вокальный конкурс NASSAL2026.
 """
 
+from html import escape
+
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
@@ -47,31 +49,22 @@ NASSAL_WELCOME_TEXT = """🏆 <b>Добро пожаловать на NASSAL2026
 
 <b>National Artist Singing Smule Award League 2026</b> — это вокальный конкурс для ярких голосов, смелых дуэтов и артистов со своим стилем.
 
-Маскоты сезона — герои вселенной <b>«Счастливы вместе»</b>, а я помогу оформить заявку аккуратно и по шагам.
-
-<b>Шаг 1 из 5.</b>
+<b>Шаг 1 из 4.</b>
 Напиши <b>одно или два имени участников</b>.
 
 Если это сольная заявка — укажи одно имя.
 Если это дуэт — укажи два имени одним сообщением."""
 
-NASSAL_SMULE_TEXT = """🎙️ <b>Отлично, имена записаны.</b>
-
-<b>Шаг 2 из 5.</b>
-Теперь напиши ваш <b>ник в Smule</b>.
-
-Если регистрируется дуэт, можно указать общий ник дуэта или основной ник для связи."""
-
 NASSAL_AVATAR_TEXT = """🖼️ <b>Принято.</b>
 
-<b>Шаг 3 из 5.</b>
+<b>Шаг 2 из 4.</b>
 Теперь пришли <b>аватар</b> участника или дуэта одной фотографией.
 
 Это изображение попадёт в заявку для администраторов конкурса."""
 
 NASSAL_CATEGORY_INTRO_TEXT = """🎼 <b>Супер, аватар получен.</b>
 
-<b>Шаг 4 из 5.</b>
+<b>Шаг 3 из 4.</b>
 Теперь выбери корзину и отправь <b>число от 1 до 4</b>.
 
 Ниже я покажу все корзины конкурса вместе с маскотами сезона."""
@@ -79,7 +72,6 @@ NASSAL_CATEGORY_INTRO_TEXT = """🎼 <b>Супер, аватар получен.
 NASSAL_CONFIRM_TEXT = """📋 <b>Проверь, пожалуйста, заявку на NASSAL2026</b>
 
 <b>Участник(и):</b> {participants}
-<b>Smule nick:</b> {smule_nick}
 <b>Корзина:</b> {basket_name} — {basket_role}
 
 Если всё верно, ответь <b>да</b>.
@@ -91,6 +83,30 @@ NASSAL_SUCCESS_TEXT = """🎉 <b>Поздравляем!</b>
 
 Заявка уже отправлена администраторам конкурса.
 Переходите в официальный чат участников по ссылке ниже:"""
+
+
+def build_baskets_status_text(registrations: list[dict]) -> str:
+    """Собирает сводку по корзинам и зарегистрированным участникам."""
+    basket_lines = ["", "<b>Текущее состояние корзин:</b>"]
+
+    for choice in ("1", "2", "3", "4"):
+        basket = NASSAL_BASKETS[choice]
+        basket_rows = [
+            row for row in registrations
+            if str(row.get("category_code", "")).strip() == choice
+        ]
+        participants = [
+            escape((row.get("participants") or "").strip())
+            for row in basket_rows
+            if (row.get("participants") or "").strip()
+        ]
+        participants_text = ", ".join(participants) if participants else "пока никого"
+        basket_lines.append(
+            f"\n<b>{choice}. {escape(basket['name'])}</b> ({len(basket_rows)})\n"
+            f"{participants_text}"
+        )
+
+    return "\n".join(basket_lines)
 
 
 def get_basket_caption(choice: str) -> str:
@@ -162,44 +178,40 @@ async def send_registration_summary(context: ContextTypes.DEFAULT_TYPE, chat_id:
     basket = NASSAL_BASKETS[basket_choice]
     summary = NASSAL_CONFIRM_TEXT.format(
         participants=registration["participants"],
-        smule_nick=registration["smule_nick"],
         basket_name=basket["name"],
         basket_role=basket["role"],
     )
-
-    avatar_file_id = registration.get("avatar_file_id")
-    if avatar_file_id:
+    photo = build_binary_stream(basket["image_path"])
+    if photo:
         await context.bot.send_photo(
             chat_id=chat_id,
-            photo=avatar_file_id,
+            photo=photo,
             caption=summary,
             parse_mode='HTML',
         )
     else:
-        photo = build_binary_stream(basket["image_path"])
-        if photo:
-            await context.bot.send_photo(
-                chat_id=chat_id,
-                photo=photo,
-                caption=summary,
-                parse_mode='HTML',
-            )
-        else:
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=summary,
-                parse_mode='HTML',
-            )
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=summary,
+            parse_mode='HTML',
+        )
 
 
-async def send_success_message(context: ContextTypes.DEFAULT_TYPE, chat_id: int):
+async def send_success_message(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    registrations: list[dict] | None = None,
+):
     """Отправляет финальное поздравление и ссылку на чат конкурса."""
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("Перейти в чат NASSAL2026", url=NASSAL_JOIN_URL)]
     ])
+    text = NASSAL_SUCCESS_TEXT
+    if registrations is not None:
+        text = f"{text}{build_baskets_status_text(registrations)}"
     await context.bot.send_message(
         chat_id=chat_id,
-        text=NASSAL_SUCCESS_TEXT,
+        text=text,
         parse_mode='HTML',
         reply_markup=keyboard,
     )
