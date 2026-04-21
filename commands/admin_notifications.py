@@ -49,6 +49,37 @@ async def send_to_admins(context: ContextTypes.DEFAULT_TYPE, message: str, admin
     
     logger.info("Сообщение отправлено %s из %s админов", sent_count, len(admin_ids))
 
+
+async def send_photo_to_admins(
+    context: ContextTypes.DEFAULT_TYPE,
+    photo_file_id: str,
+    caption: str,
+    admin_ids: list = None,
+):
+    """Отправка фотографии всем админам."""
+    if not admin_ids:
+        admin_ids = get_admin_ids()
+
+    if not admin_ids:
+        logger.warning("Нет админов для отправки фотографии")
+        return
+
+    sent_count = 0
+    for admin_id in admin_ids:
+        try:
+            await context.bot.send_photo(
+                chat_id=admin_id,
+                photo=photo_file_id,
+                caption=caption,
+                parse_mode='HTML',
+            )
+            sent_count += 1
+            logger.info("Фотография отправлена админу %s", admin_id)
+        except Exception as e:
+            logger.exception("Ошибка отправки фотографии админу %s: %s", admin_id, e)
+
+    logger.info("Фотография отправлена %s из %s админов", sent_count, len(admin_ids))
+
 async def send_moderation_request(context: ContextTypes.DEFAULT_TYPE, request_type: str, user_info: str, content: str):
     """Отправка запроса на модерацию"""
     emoji_map = {

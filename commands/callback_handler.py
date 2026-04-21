@@ -17,8 +17,11 @@ ANON_STATE = 'anon_waiting_text'
 SONG_STATE = 'song_waiting_text'
 RATE_LINK_STATE = 'rate_waiting_link'
 PROMOTE_STATE = 'promote_waiting_link'
-NASSAL_NICK_STATE = 'nassal_waiting_nick'
+NASSAL_NAMES_STATE = 'nassal_waiting_names'
+NASSAL_SMULE_NICK_STATE = 'nassal_waiting_smule_nick'
+NASSAL_AVATAR_STATE = 'nassal_waiting_avatar'
 NASSAL_CATEGORY_STATE = 'nassal_waiting_category'
+NASSAL_CONFIRM_STATE = 'nassal_waiting_confirm'
 
 # Словари для отслеживания времени последнего запроса
 last_song_day_time = {}
@@ -138,7 +141,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     elif query.data == "button_nassal2026":
         from commands.nassal2026 import send_nassal_intro
 
-        user_states[user_id] = NASSAL_NICK_STATE
+        user_states[user_id] = NASSAL_NAMES_STATE
         context.user_data.pop("nassal_registration", None)
 
         try:
@@ -147,5 +150,5 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             print(f"Ошибка при запуске регистрации NASSAL2026: {e}")
             await context.bot.send_message(
                 chat_id,
-                "🏆 Добро пожаловать на конкурс NASSAL2026!\n\nНапишите, пожалуйста, ваш ник в Smule."
+                "🏆 Добро пожаловать на конкурс NASSAL2026!\n\nНапишите, пожалуйста, одно имя или два имени участников."
             )

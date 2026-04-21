@@ -14,13 +14,32 @@ from commands.callback_handler import (
     SONG_STATE,
     RATE_LINK_STATE,
     PROMOTE_STATE,
-    NASSAL_NICK_STATE,
+    NASSAL_NAMES_STATE,
+    NASSAL_SMULE_NICK_STATE,
+    NASSAL_AVATAR_STATE,
     NASSAL_CATEGORY_STATE,
+    NASSAL_CONFIRM_STATE,
 )
 
 # Импорт функций отправки админам
-from commands.admin_notifications import send_moderation_request, send_anon_with_photo, send_anon_with_voice, send_to_admins
-from commands.nassal2026 import NASSAL_CATEGORY_TEXT, NASSAL_SUCCESS_TEXT, NASSAL_CATEGORY_LABELS
+from commands.admin_notifications import (
+    send_moderation_request,
+    send_anon_with_photo,
+    send_anon_with_voice,
+    send_photo_to_admins,
+    send_to_admins,
+)
+from commands.nassal2026 import (
+    NASSAL_BASKETS,
+    NASSAL_SMULE_TEXT,
+    NASSAL_AVATAR_TEXT,
+    YES_ANSWERS,
+    NO_ANSWERS,
+    get_basket_full_name,
+    send_category_guide,
+    send_registration_summary,
+    send_success_message,
+)
 
 async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик FSM состояний"""
@@ -48,49 +67,91 @@ async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
             user_states.pop(user_id, None)
             return
 
-    elif user_states.get(user_id) == NASSAL_NICK_STATE:
-        smule_nick = msg.text.strip() if (msg and msg.text) else ""
-        if not smule_nick:
-            await msg.reply_text("Пожалуйста, напишите ваш ник в Smule текстом.")
+    elif user_states.get(user_id) == NASSAL_NAMES_STATE:
+        participants = msg.text.strip() if (msg and msg.text) else ""
+        if not participants:
+            await msg.reply_text("Пожалуйста, напишите одно имя или два имени участников текстом.")
             return
 
         context.user_data["nassal_registration"] = {
-            "smule_nick": smule_nick,
+            "participants": participants,
         }
-        user_states[user_id] = NASSAL_CATEGORY_STATE
-        await msg.reply_text(NASSAL_CATEGORY_TEXT, parse_mode='HTML')
+        user_states[user_id] = NASSAL_SMULE_NICK_STATE
+        await msg.reply_text(NASSAL_SMULE_TEXT, parse_mode='HTML')
+        return
+
+    elif user_states.get(user_id) == NASSAL_SMULE_NICK_STATE:
+        smule_nick = msg.text.strip() if (msg and msg.text) else ""
+        if not smule_nick:
+            await msg.reply_text("Пожалуйста, напишите ник в Smule текстом.")
+            return
+
+        registration = context.user_data.setdefault("nassal_registration", {})
+        registration["smule_nick"] = smule_nick
+        user_states[user_id] = NASSAL_AVATAR_STATE
+        await msg.reply_text(NASSAL_AVATAR_TEXT, parse_mode='HTML')
+        return
+
+    elif user_states.get(user_id) == NASSAL_AVATAR_STATE:
+        await msg.reply_text("Сейчас нужен аватар. Пришлите его одной фотографией.")
         return
 
     elif user_states.get(user_id) == NASSAL_CATEGORY_STATE:
         category_choice = msg.text.strip() if (msg and msg.text) else ""
-        if category_choice not in NASSAL_CATEGORY_LABELS:
+        if category_choice not in NASSAL_BASKETS:
             await msg.reply_text(
                 "Нужно отправить одно число: 1, 2, 3 или 4.\n\n"
-                "1 — вокалисты\n"
-                "2 — реперы\n"
-                "3 — рокеры\n"
-                "4 — приколисты"
+                "1 — Корзина имени Гены Букина — Вокалисты\n"
+                "2 — Корзина имени Светы Букиной — Рокеры\n"
+                "3 — Корзина имени Ромы Букина — Реперы\n"
+                "4 — Корзина имени Даши Букиной — Приколисты"
             )
             return
 
         registration = context.user_data.get("nassal_registration", {})
-        smule_nick = registration.get("smule_nick")
-        user_info = f"@{update.effective_user.username}" if update.effective_user.username else f"ID{user_id}"
-        full_name = update.effective_user.full_name or "Без имени"
-        category_name = NASSAL_CATEGORY_LABELS[category_choice]
+        registration["category_choice"] = category_choice
+        user_states[user_id] = NASSAL_CONFIRM_STATE
+        await send_registration_summary(context, msg.chat_id, registration)
+        return
 
-        admin_message = (
-            "🏆 <b>Новая регистрация на конкурс NASSAL2026</b>\n\n"
-            f"<b>Telegram:</b> {user_info}\n"
-            f"<b>Имя:</b> {full_name}\n"
-            f"<b>Smule nick:</b> {smule_nick}\n"
-            f"<b>Корзина:</b> {category_choice} — {category_name}"
-        )
+    elif user_states.get(user_id) == NASSAL_CONFIRM_STATE:
+        answer = msg.text.strip().lower() if (msg and msg.text) else ""
 
-        await send_to_admins(context, admin_message)
-        await msg.reply_text(NASSAL_SUCCESS_TEXT, parse_mode='HTML')
-        context.user_data.pop("nassal_registration", None)
-        user_states.pop(user_id, None)
+        if answer in YES_ANSWERS:
+            registration = context.user_data.get("nassal_registration", {})
+            user_info = f"@{update.effective_user.username}" if update.effective_user.username else f"ID{user_id}"
+            full_name = update.effective_user.full_name or "Без имени"
+            basket_full_name = get_basket_full_name(registration["category_choice"])
+            admin_message = (
+                "🏆 <b>Новая регистрация на конкурс NASSAL2026</b>\n\n"
+                f"<b>Telegram:</b> {user_info}\n"
+                f"<b>Имя в Telegram:</b> {full_name}\n"
+                f"<b>Участник(и):</b> {registration['participants']}\n"
+                f"<b>Smule nick:</b> {registration['smule_nick']}\n"
+                f"<b>Корзина:</b> {basket_full_name}"
+            )
+
+            avatar_file_id = registration.get("avatar_file_id")
+            if avatar_file_id:
+                await send_photo_to_admins(context, avatar_file_id, admin_message)
+            else:
+                await send_to_admins(context, admin_message)
+
+            await send_success_message(context, msg.chat_id)
+            context.user_data.pop("nassal_registration", None)
+            user_states.pop(user_id, None)
+            return
+
+        if answer in NO_ANSWERS:
+            context.user_data.pop("nassal_registration", None)
+            user_states[user_id] = NASSAL_NAMES_STATE
+            await msg.reply_text(
+                "Хорошо, давай заполним заявку заново.\n\n"
+                "Напиши одно имя или два имени участников для регистрации на NASSAL2026."
+            )
+            return
+
+        await msg.reply_text("Ответьте, пожалуйста, <b>да</b> или <b>нет</b>.", parse_mode='HTML')
         return
 
     # FSM: если пользователь предлагает песню
@@ -153,6 +214,18 @@ async def handle_anon_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if chat_type != "private":
         return
         
+    if user_states.get(user_id) == NASSAL_AVATAR_STATE:
+        photo_id = (msg.photo[-1].file_id if (msg and msg.photo) else None)
+        if not photo_id:
+            await msg.reply_text("Не удалось получить фото. Попробуйте отправить аватар ещё раз.")
+            return
+
+        registration = context.user_data.setdefault("nassal_registration", {})
+        registration["avatar_file_id"] = photo_id
+        user_states[user_id] = NASSAL_CATEGORY_STATE
+        await send_category_guide(context, msg.chat_id)
+        return
+
     if user_states.get(user_id) == ANON_STATE:
         print(f"Получена фотография от {user_id} в ANON_STATE.")
         # Обработка фотографий
