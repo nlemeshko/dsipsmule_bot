@@ -15,6 +15,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 **Основные:**
 /start - запуск бота и кнопочное меню
 /help - показать это сообщение
+/nassal2026 - регистрация на конкурс NASSAL2026
 
 **Развлечения:**
 /prediction - получить вокальное предсказание

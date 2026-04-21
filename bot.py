@@ -20,6 +20,7 @@ from commands.entertainment import random_command, cat_command, meme_command, ca
 from commands.pole import pole_command, handle_pole_message
 from commands.roast_proof import roast_command, proof_command
 from commands.ask import ask_command
+from commands.nassal2026 import nassal2026_command
 from commands.callback_handler import handle_callback_query
 from commands.fsm_handler import handle_fsm_message, handle_anon_photo, handle_anon_voice
 
@@ -48,6 +49,7 @@ class TelegramBot:
         # Основные команды
         self.application.add_handler(CommandHandler("start", start_command))
         self.application.add_handler(CommandHandler("help", help_command))
+        self.application.add_handler(CommandHandler("nassal2026", nassal2026_command))
         
         # Команды развлечений
         self.application.add_handler(CommandHandler("prediction", prediction_command))

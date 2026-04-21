@@ -4,15 +4,23 @@
 Обработчик FSM состояний для анонимок, песен, оценок и промо
 """
 
-import os
 from telegram import Update
 from telegram.ext import ContextTypes
 
 # Импорт состояний из callback_handler
-from commands.callback_handler import user_states, ANON_STATE, SONG_STATE, RATE_LINK_STATE, PROMOTE_STATE
+from commands.callback_handler import (
+    user_states,
+    ANON_STATE,
+    SONG_STATE,
+    RATE_LINK_STATE,
+    PROMOTE_STATE,
+    NASSAL_NICK_STATE,
+    NASSAL_CATEGORY_STATE,
+)
 
 # Импорт функций отправки админам
-from commands.admin_notifications import send_moderation_request, send_anon_with_photo, send_anon_with_voice
+from commands.admin_notifications import send_moderation_request, send_anon_with_photo, send_anon_with_voice, send_to_admins
+from commands.nassal2026 import NASSAL_CATEGORY_TEXT, NASSAL_SUCCESS_TEXT, NASSAL_CATEGORY_LABELS
 
 async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик FSM состояний"""
@@ -39,6 +47,51 @@ async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await msg.reply_text("Спасибо! Ваша анонимка отправлена на модерацию.")
             user_states.pop(user_id, None)
             return
+
+    elif user_states.get(user_id) == NASSAL_NICK_STATE:
+        smule_nick = msg.text.strip() if (msg and msg.text) else ""
+        if not smule_nick:
+            await msg.reply_text("Пожалуйста, напишите ваш ник в Smule текстом.")
+            return
+
+        context.user_data["nassal_registration"] = {
+            "smule_nick": smule_nick,
+        }
+        user_states[user_id] = NASSAL_CATEGORY_STATE
+        await msg.reply_text(NASSAL_CATEGORY_TEXT, parse_mode='HTML')
+        return
+
+    elif user_states.get(user_id) == NASSAL_CATEGORY_STATE:
+        category_choice = msg.text.strip() if (msg and msg.text) else ""
+        if category_choice not in NASSAL_CATEGORY_LABELS:
+            await msg.reply_text(
+                "Нужно отправить одно число: 1, 2, 3 или 4.\n\n"
+                "1 — вокалисты\n"
+                "2 — реперы\n"
+                "3 — рокеры\n"
+                "4 — приколисты"
+            )
+            return
+
+        registration = context.user_data.get("nassal_registration", {})
+        smule_nick = registration.get("smule_nick")
+        user_info = f"@{update.effective_user.username}" if update.effective_user.username else f"ID{user_id}"
+        full_name = update.effective_user.full_name or "Без имени"
+        category_name = NASSAL_CATEGORY_LABELS[category_choice]
+
+        admin_message = (
+            "🏆 <b>Новая регистрация на конкурс NASSAL2026</b>\n\n"
+            f"<b>Telegram:</b> {user_info}\n"
+            f"<b>Имя:</b> {full_name}\n"
+            f"<b>Smule nick:</b> {smule_nick}\n"
+            f"<b>Корзина:</b> {category_choice} — {category_name}"
+        )
+
+        await send_to_admins(context, admin_message)
+        await msg.reply_text(NASSAL_SUCCESS_TEXT, parse_mode='HTML')
+        context.user_data.pop("nassal_registration", None)
+        user_states.pop(user_id, None)
+        return
 
     # FSM: если пользователь предлагает песню
     elif user_states.get(user_id) == SONG_STATE:

@@ -17,6 +17,8 @@ ANON_STATE = 'anon_waiting_text'
 SONG_STATE = 'song_waiting_text'
 RATE_LINK_STATE = 'rate_waiting_link'
 PROMOTE_STATE = 'promote_waiting_link'
+NASSAL_NICK_STATE = 'nassal_waiting_nick'
+NASSAL_CATEGORY_STATE = 'nassal_waiting_category'
 
 # Словари для отслеживания времени последнего запроса
 last_song_day_time = {}
@@ -132,3 +134,18 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         except Exception as e:
             print(f"Ошибка при отправке картинки или текста для кнопки Промо: {e}")
             await context.bot.send_message(chat_id, response_text)
+
+    elif query.data == "button_nassal2026":
+        from commands.nassal2026 import send_nassal_intro
+
+        user_states[user_id] = NASSAL_NICK_STATE
+        context.user_data.pop("nassal_registration", None)
+
+        try:
+            await send_nassal_intro(context, chat_id)
+        except Exception as e:
+            print(f"Ошибка при запуске регистрации NASSAL2026: {e}")
+            await context.bot.send_message(
+                chat_id,
+                "🏆 Добро пожаловать на конкурс NASSAL2026!\n\nНапишите, пожалуйста, ваш ник в Smule."
+            )

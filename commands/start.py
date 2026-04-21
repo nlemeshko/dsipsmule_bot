@@ -6,6 +6,7 @@
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
+from commands.common import build_binary_stream
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /start"""
@@ -14,6 +15,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if chat_type == "private":
         # Создаем кнопочное меню для личных сообщений
         keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("🏆 NASSAL2026", callback_data="button_nassal2026")
+            ],
             [
                 InlineKeyboardButton("🕵 Анонимка", callback_data="button1"),
                 InlineKeyboardButton("🎶 Песня", callback_data="button2")
@@ -27,12 +31,14 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
         ])
         
-        message = """🗡️ Привет. Я Геральт из Ривии. Ведьмак. 
+        message = """🏆 <b>NASSAL2026 уже здесь!</b>
 
-Похоже, у нас здесь новый заказ — развлечь этот чат и навести порядок.
-Выбирай, что будем делать:
+Первой кнопкой я вынес регистрацию на конкурс, чтобы до неё можно было дотянуться сразу.
+Если хочешь подать заявку, нажми <b>NASSAL2026</b> и я проведу тебя по шагам.
 
-**Контракты:**
+🗡️ А если нужен другой контракт, вот всё меню:
+
+<b>Контракты:</b>
 • 🕵 Анонимка — передам записку без лишних вопросов
 • 🎶 Песня — предложи трек, добавим в архив
 • 🎧 Оценить — пришли ссылку, скажем честно
@@ -40,8 +46,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • 📢 Промо — поможем громко заявить о себе
 
 Если потеряешься — зови через /help. Я рядом."""
-        
-        await update.message.reply_text(message, reply_markup=keyboard, parse_mode='Markdown')
+
+        photo = build_binary_stream('images/nassal2026.png')
+        if photo:
+            await update.message.reply_photo(photo, caption=message, reply_markup=keyboard, parse_mode='HTML')
+        else:
+            await update.message.reply_text(message, reply_markup=keyboard, parse_mode='HTML')
         
     elif chat_type == "channel":
         message = "🗡️ Бот Ведьмака активен в канале. Используйте /help для списка контрактов."
