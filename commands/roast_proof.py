@@ -4,10 +4,10 @@
 Команды /roast и /proof
 """
 
-import os
 import random
 from telegram import Update
 from telegram.ext import ContextTypes
+from commands.common import build_binary_stream
 
 # Список ответов для команды /proof
 proof_agree_responses = [
@@ -89,13 +89,13 @@ async def proof_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Отправляем изображение и текст как ответ на соответствующее сообщение
     try:
         image_path = 'images/proof.png'
-        if os.path.exists(image_path):
-            with open(image_path, 'rb') as photo:
-                await update.message.reply_photo(
-                    photo,
-                    caption=response,
-                    reply_to_message_id=reply_to_message_id
-                )
+        photo = build_binary_stream(image_path)
+        if photo:
+            await update.message.reply_photo(
+                photo,
+                caption=response,
+                reply_to_message_id=reply_to_message_id
+            )
             print(f"Картинка {image_path} отправлена с ответом для команды /proof с reply_to_message_id={reply_to_message_id}.")
         else:
             print(f"Файл картинки {image_path} не найден для команды /proof. Отправляю только текст как ответ.")
@@ -131,13 +131,13 @@ async def roast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Отправляем изображение и текст как ответ на соответствующее сообщение
     try:
         image_path = 'images/roast.png'
-        if os.path.exists(image_path):
-            with open(image_path, 'rb') as photo:
-                await update.message.reply_photo(
-                    photo,
-                    caption=response,
-                    reply_to_message_id=reply_id
-                )
+        photo = build_binary_stream(image_path)
+        if photo:
+            await update.message.reply_photo(
+                photo,
+                caption=response,
+                reply_to_message_id=reply_id
+            )
             print(f"Картинка {image_path} отправлена с ответом для команды /roast")
         else:
             print(f"Файл картинки {image_path} не найден для команды /roast. Отправляю только текст.")

@@ -4,10 +4,10 @@
 Команда /prediction - вокальные предсказания
 """
 
-import os
 import random
 from telegram import Update
 from telegram.ext import ContextTypes
+from commands.common import build_binary_stream
 
 # Список предсказаний для команды /prediction
 prediction_responses = [
@@ -58,16 +58,14 @@ async def prediction_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         # Путь к файлу с картинкой
         image_path = 'images/prediction.png'
+        photo = build_binary_stream(image_path)
 
-        # Проверяем, существует ли файл
-        if os.path.exists(image_path):
-            with open(image_path, 'rb') as photo:
-                # Отправляем картинку с текстом предсказания в подписи
-                await update.message.reply_photo(
-                    photo, 
-                    caption=f"🧙‍♂️ Вокальный предсказатель:\n{prediction}",
-                    reply_to_message_id=update.message.message_id
-                )
+        if photo:
+            await update.message.reply_photo(
+                photo,
+                caption=f"🧙‍♂️ Вокальный предсказатель:\n{prediction}",
+                reply_to_message_id=update.message.message_id
+            )
             print(f"Картинка {image_path} отправлена с предсказанием как ответ.")
         else:
             # Если файл не найден, отправляем только текст предсказания как ответ

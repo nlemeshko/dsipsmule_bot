@@ -4,11 +4,11 @@
 Команды для зала славы/позора: /hall, /halllist, /vote
 """
 
-import os
 import csv
 from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
+from commands.common import build_binary_stream
 
 # Загрузка данных зала славы/позора
 def load_hall_data():
@@ -71,12 +71,12 @@ async def hall_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Добавляем отправку картинки
         image_path = 'images/hall.png'
-        if os.path.exists(image_path):
-            with open(image_path, 'rb') as photo:
-                await update.message.reply_photo(
-                    photo, 
-                    caption=response_text
-                )
+        photo = build_binary_stream(image_path)
+        if photo:
+            await update.message.reply_photo(
+                photo,
+                caption=response_text
+            )
             print(f"Картинка {image_path} отправлена как ответ для команды /hall.")
         else:
             print(f"Файл картинки {image_path} не найден для команды /hall. Отправляю только текст как ответ.")
@@ -116,9 +116,9 @@ async def halllist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Добавляем отправку картинки
         image_path = 'images/halllist.png'
-        if os.path.exists(image_path):
-            with open(image_path, 'rb') as photo:
-                await update.message.reply_photo(photo, caption=response_text)
+        photo = build_binary_stream(image_path)
+        if photo:
+            await update.message.reply_photo(photo, caption=response_text)
             print(f"Картинка {image_path} отправлена для команды /halllist.")
         else:
             print(f"Файл картинки {image_path} не найден для команды /halllist. Отправляю только текст.")
@@ -146,11 +146,6 @@ async def vote_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         nominee = args[2]
-        voter = update.effective_user.username or f"id{update.effective_user.id}"
-        
-        # Читаем текущие данные
-        hall_data = load_hall_data()
-        
         # Ищем номинацию
         found = False
         for row in hall_data:
@@ -171,9 +166,9 @@ async def vote_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Добавляем отправку картинки
         image_path = 'images/vote.png'
-        if os.path.exists(image_path):
-            with open(image_path, 'rb') as photo:
-                await update.message.reply_photo(update.message.chat.id, photo, caption=response_text)
+        photo = build_binary_stream(image_path)
+        if photo:
+            await update.message.reply_photo(photo, caption=response_text)
             print(f"Картинка {image_path} отправлена для команды /vote.")
         else:
             print(f"Файл картинки {image_path} не найден для команды /vote. Отправляю только текст.")

@@ -4,11 +4,11 @@
 Игра "Поле чудес" - команда /pole
 """
 
-import os
 import random
 import asyncio
 from telegram import Update
 from telegram.ext import ContextTypes
+from commands.common import build_binary_stream
 
 # Список слов для игры в "Поле чудес"
 pole_words = [
@@ -40,10 +40,10 @@ async def send_random_voice(bot, chat_id, folder, prefix, count):
         number = random.randint(1, count)
         # Формируем путь к файлу
         voice_path = f"{folder}/{prefix}_{number}.mp3"
-        
-        if os.path.exists(voice_path):
-            with open(voice_path, 'rb') as voice:
-                await bot.send_voice(chat_id, voice)
+
+        voice = build_binary_stream(voice_path)
+        if voice:
+            await bot.send_voice(chat_id, voice)
             print(f"Отправлено голосовое сообщение: {voice_path}")
         else:
             print(f"Файл голосового сообщения не найден: {voice_path}")
@@ -98,10 +98,10 @@ async def pole_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Отправляем изображение поля чудес как ответ на сообщение
     image_path = 'images/pole.png'
-    if os.path.exists(image_path):
-        with open(image_path, 'rb') as photo:
-            if msg:
-                await msg.reply_photo(photo, reply_to_message_id=msg.message_id)
+    photo = build_binary_stream(image_path)
+    if photo:
+        if msg:
+            await msg.reply_photo(photo, reply_to_message_id=msg.message_id)
         print(f"Картинка {image_path} отправлена для команды /pole как ответ.")
     else:
         print(f"Файл картинки {image_path} не найден для команды /pole. Отправляю только текст.")
@@ -179,9 +179,10 @@ async def handle_pole_message(update: Update, context: ContextTypes.DEFAULT_TYPE
             del pole_games[game_owner]
             # Отправляем голосовое сообщение победы как ответ на сообщение
             try:
-                with open('pole/win.mp3', 'rb') as voice:
+                voice = build_binary_stream('pole/win.mp3')
+                if voice:
                     await context.bot.send_voice(chat_id, voice, reply_to_message_id=msg.message_id)
-                print("Отправлено голосовое сообщение победы: pole/win.mp3")
+                    print("Отправлено голосовое сообщение победы: pole/win.mp3")
             except Exception as e:
                 print(f"Ошибка при отправке голосового сообщения победы: {e}")
         else:
@@ -215,9 +216,10 @@ async def handle_pole_message(update: Update, context: ContextTypes.DEFAULT_TYPE
                 del pole_games[game_owner]
                 # Отправляем голосовое сообщение победы как ответ на сообщение
                 try:
-                    with open('pole/win.mp3', 'rb') as voice:
+                    voice = build_binary_stream('pole/win.mp3')
+                    if voice:
                         await context.bot.send_voice(chat_id, voice, reply_to_message_id=msg.message_id)
-                    print("Отправлено голосовое сообщение победы: pole/win.mp3")
+                        print("Отправлено голосовое сообщение победы: pole/win.mp3")
                 except Exception as e:
                     print(f"Ошибка при отправке голосового сообщения победы: {e}")
             else:

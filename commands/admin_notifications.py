@@ -4,22 +4,26 @@
 Отправка уведомлений администраторам
 """
 
+import logging
 import os
+from functools import lru_cache
 from telegram.ext import ContextTypes
 
+
+logger = logging.getLogger(__name__)
+
 # Получаем список админов из переменных окружения
+@lru_cache(maxsize=1)
 def get_admin_ids():
     """Получение списка админов из переменных окружения"""
     admins_str = os.getenv('ADMINS', '')
-    print(f"🔍 DEBUG: ADMINS строка = '{admins_str}'")
-    
-    if admins_str:
-        admin_ids = [int(uid.strip()) for uid in admins_str.split(',') if uid.strip()]
-        print(f"🔍 DEBUG: Распарсенные ID админов = {admin_ids}")
-        return admin_ids
-    else:
-        print(f"🔍 DEBUG: Строка ADMINS пустая")
+    if not admins_str:
+        logger.info("Переменная ADMINS не задана")
         return []
+
+    admin_ids = [int(uid.strip()) for uid in admins_str.split(',') if uid.strip()]
+    logger.info("Загружено %s admin ID", len(admin_ids))
+    return admin_ids
 
 async def send_to_admins(context: ContextTypes.DEFAULT_TYPE, message: str, admin_ids: list = None):
     """Отправка сообщения всем админам"""
@@ -27,7 +31,7 @@ async def send_to_admins(context: ContextTypes.DEFAULT_TYPE, message: str, admin
         admin_ids = get_admin_ids()
     
     if not admin_ids:
-        print(f"⚠️ Нет админов для отправки сообщения: {message}")
+        logger.warning("Нет админов для отправки сообщения")
         return
     
     sent_count = 0
@@ -39,11 +43,11 @@ async def send_to_admins(context: ContextTypes.DEFAULT_TYPE, message: str, admin
                 parse_mode='HTML'
             )
             sent_count += 1
-            print(f"✅ Сообщение отправлено админу {admin_id}")
+            logger.info("Сообщение отправлено админу %s", admin_id)
         except Exception as e:
-            print(f"❌ Ошибка отправки админу {admin_id}: {e}")
+            logger.exception("Ошибка отправки админу %s: %s", admin_id, e)
     
-    print(f"📤 Сообщение отправлено {sent_count} из {len(admin_ids)} админов")
+    logger.info("Сообщение отправлено %s из %s админов", sent_count, len(admin_ids))
 
 async def send_moderation_request(context: ContextTypes.DEFAULT_TYPE, request_type: str, user_info: str, content: str):
     """Отправка запроса на модерацию"""
@@ -86,9 +90,9 @@ async def send_anon_with_photo(context: ContextTypes.DEFAULT_TYPE, user_info: st
                 caption=message,
                 parse_mode='HTML'
             )
-            print(f"✅ Анонимная фотография отправлена админу {admin_id}")
+            logger.info("Анонимная фотография отправлена админу %s", admin_id)
         except Exception as e:
-            print(f"❌ Ошибка отправки анонимной фотографии админу {admin_id}: {e}")
+            logger.exception("Ошибка отправки анонимной фотографии админу %s: %s", admin_id, e)
 
 async def send_anon_with_voice(context: ContextTypes.DEFAULT_TYPE, user_info: str, voice_file_id: str, caption: str = ""):
     """Отправка анонимного голосового сообщения админам"""
@@ -111,6 +115,6 @@ async def send_anon_with_voice(context: ContextTypes.DEFAULT_TYPE, user_info: st
                 caption=message,
                 parse_mode='HTML'
             )
-            print(f"✅ Анонимное голосовое сообщение отправлено админу {admin_id}")
+            logger.info("Анонимное голосовое сообщение отправлено админу %s", admin_id)
         except Exception as e:
-            print(f"❌ Ошибка отправки анонимного голосового сообщения админу {admin_id}: {e}")
+            logger.exception("Ошибка отправки анонимного голосового сообщения админу %s: %s", admin_id, e)

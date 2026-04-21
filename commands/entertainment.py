@@ -4,12 +4,13 @@
 Команды развлечений: /random, /cat, /meme, /casino
 """
 
-import os
+import asyncio
 import time
 import random
 import requests
 from telegram import Update
 from telegram.ext import ContextTypes
+from commands.common import build_binary_stream
 
 # Словари для отслеживания времени последнего запроса по командам
 last_russong_time = {}
@@ -50,6 +51,20 @@ def get_random_russian_song():
         print(f"Ошибка при получении песни с Last.fm (tag.getTopTracks/russian): {e}")
         return None, None, None
 
+
+def fetch_cat_image():
+    """Получить случайное изображение котика."""
+    response = requests.get("https://cataas.com/cat", timeout=15)
+    content_type = response.headers.get('Content-Type', '')
+    return response.status_code, content_type, response.content
+
+
+def fetch_memes():
+    """Получить список мемов из Imgflip."""
+    response = requests.get("https://api.imgflip.com/get_memes", timeout=10)
+    response.raise_for_status()
+    return response.json()
+
 async def random_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /random"""
     # Ограничение по времени для команды /random
@@ -64,7 +79,7 @@ async def random_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     print(f"Команда /random от {update.effective_user.username or update.effective_user.id}")
     
-    title, artist, link = get_random_russian_song()
+    title, artist, link = await asyncio.to_thread(get_random_russian_song)
     if not title:
         await update.message.reply_text("😔 К сожалению, не удалось найти песню.")
         return
@@ -95,18 +110,15 @@ async def cat_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"Команда /cat от {update.effective_user.username or update.effective_user.id}")
     
     try:
-        # URL для получения случайного изображения котика
-        cat_api_url = "https://cataas.com/cat"
-        
-        response = requests.get(cat_api_url, timeout=15)
+        status_code, content_type, content = await asyncio.to_thread(fetch_cat_image)
         
         # Проверяем успешность запроса и тип контента (ожидаем изображение)
-        if response.status_code == 200 and 'image' in response.headers.get('Content-Type', ''):
-            await update.message.reply_photo(response.content, reply_to_message_id=update.message.message_id)
+        if status_code == 200 and 'image' in content_type:
+            await update.message.reply_photo(content, reply_to_message_id=update.message.message_id)
             print(f"Изображение котика отправлено в чат {update.message.chat.id} как ответ.")
             last_cat_time[user_id] = now # Обновляем время последнего запроса
         else:
-            print(f"Не удалось получить изображение котика. Статус: {response.status_code}, Content-Type: {response.headers.get('Content-Type')}")
+            print(f"Не удалось получить изображение котика. Статус: {status_code}, Content-Type: {content_type}")
             await update.message.reply_text("😔 Не удалось получить изображение котика. Попробуйте позже.")
             
     except Exception as e:
@@ -125,11 +137,8 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     print(f"Команда /meme от {update.effective_user.username or update.effective_user.id}")
-    meme_api_url = "https://api.imgflip.com/get_memes"
     try:
-        response = requests.get(meme_api_url, timeout=10)
-        response.raise_for_status() # Проверка на ошибки HTTP
-        data = response.json()
+        data = await asyncio.to_thread(fetch_memes)
 
         if data and data['success'] and data['data'] and data['data']['memes']:
             memes = data['data']['memes']
@@ -174,9 +183,9 @@ async def casino_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Отправляем изображение казино как ответ на сообщение
     image_path = 'images/casino.png'
-    if os.path.exists(image_path):
-        with open(image_path, 'rb') as photo:
-            await update.message.reply_photo(photo, reply_to_message_id=update.message.message_id)
+    photo = build_binary_stream(image_path)
+    if photo:
+        await update.message.reply_photo(photo, reply_to_message_id=update.message.message_id)
         print(f"Картинка {image_path} отправлена для команды /casino как ответ.")
     else:
         print(f"Файл картинки {image_path} не найден для команды /casino. Отправляю только символы.")
@@ -194,7 +203,7 @@ async def casino_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for symbol in result_symbols:
         try:
             await update.message.reply_text(symbol, reply_to_message_id=update.message.message_id)
-            time.sleep(1) # Задержка в 1 секунду между символами
+            await asyncio.sleep(1) # Задержка в 1 секунду между символами
         except Exception as e:
             print(f"Ошибка при отправке символа казино {symbol}: {e}")
 

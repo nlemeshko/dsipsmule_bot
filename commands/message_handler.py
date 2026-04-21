@@ -75,4 +75,4 @@ async def handle_personal_message(update: Update, context: ContextTypes.DEFAULT_
         # Случайный ответ, если не найдено ключевых слов
         response = random.choice(PERSONAL_RESPONSES)
     
-        await msg.reply_text(response)
+    await msg.reply_text(response)

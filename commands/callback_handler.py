@@ -4,12 +4,13 @@
 Обработчик callback'ов для кнопочного меню
 """
 
-import os
+import asyncio
 import time
 import random
 import requests
 from telegram import Update, CallbackQuery
 from telegram.ext import ContextTypes
+from commands.common import build_binary_stream
 
 # FSM состояния
 ANON_STATE = 'anon_waiting_text'
@@ -22,6 +23,25 @@ last_song_day_time = {}
 
 # Глобальный словарь состояний пользователей
 user_states = {}
+
+
+async def send_cached_photo_or_message(context, chat_id: int, image_path: str, response_text: str):
+    """Отправляет закэшированное изображение или текстовый fallback."""
+    photo = build_binary_stream(image_path)
+    if photo:
+        await context.bot.send_photo(chat_id, photo, caption=response_text)
+    else:
+        await context.bot.send_message(chat_id, response_text)
+
+
+def fetch_song_of_the_day():
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36'
+    }
+    url = 'https://www.smule.com/api/profile/performances?accountId=96242367&appUid=sing&offset=0&limit=25'
+    resp = requests.get(url, headers=headers, timeout=10)
+    resp.raise_for_status()
+    return resp.json()
 
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик callback'ов от кнопок"""
@@ -41,13 +61,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         image_path = 'images/anon.png'
         
         try:
-            if os.path.exists(image_path):
-                with open(image_path, 'rb') as photo:
-                    await context.bot.send_photo(chat_id, photo, caption=response_text)
-                print(f"Картинка {image_path} отправлена для кнопки Анонимка.")
-            else:
-                print(f"Файл картинки {image_path} не найден для кнопки Анонимка. Отправляю только текст.")
-                await context.bot.send_message(chat_id, response_text)
+            await send_cached_photo_or_message(context, chat_id, image_path, response_text)
         except Exception as e:
             print(f"Ошибка при отправке картинки или текста для кнопки Анонимка: {e}")
             await context.bot.send_message(chat_id, response_text)
@@ -59,13 +73,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         image_path = 'images/sing.png'
         
         try:
-            if os.path.exists(image_path):
-                with open(image_path, 'rb') as photo:
-                    await context.bot.send_photo(chat_id, photo, caption=response_text)
-                print(f"Картинка {image_path} отправлена для кнопки Предложить песню.")
-            else:
-                print(f"Файл картинки {image_path} не найден для кнопки Предложить песню. Отправляю только текст.")
-                await context.bot.send_message(chat_id, response_text)
+            await send_cached_photo_or_message(context, chat_id, image_path, response_text)
         except Exception as e:
             print(f"Ошибка при отправке картинки или текста для кнопки Предложить песню: {e}")
             await context.bot.send_message(chat_id, response_text)
@@ -77,13 +85,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         image_path = 'images/rate.png'
         
         try:
-            if os.path.exists(image_path):
-                with open(image_path, 'rb') as photo:
-                    await context.bot.send_photo(chat_id, photo, caption=response_text)
-                print(f"Картинка {image_path} отправлена для кнопки Оценить исполнение.")
-            else:
-                print(f"Файл картинки {image_path} не найден для кнопки Оценить исполнение. Отправляю только текст.")
-                await context.bot.send_message(chat_id, response_text)
+            await send_cached_photo_or_message(context, chat_id, image_path, response_text)
         except Exception as e:
             print(f"Ошибка при отправке картинки или текста для кнопки Оценить исполнение: {e}")
             await context.bot.send_message(chat_id, response_text)
@@ -98,12 +100,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         last_song_day_time[user_id] = now
         
         try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36'
-            }
-            url = 'https://www.smule.com/api/profile/performances?accountId=96242367&appUid=sing&offset=0&limit=25'
-            resp = requests.get(url, headers=headers, timeout=10)
-            data = resp.json()
+            data = await asyncio.to_thread(fetch_song_of_the_day)
             songs = data.get('list', [])
             if not songs:
                 print("Не удалось получить список песен с Smule API")
@@ -131,13 +128,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         image_path = 'images/piar.png'
         
         try:
-            if os.path.exists(image_path):
-                with open(image_path, 'rb') as photo:
-                    await context.bot.send_photo(chat_id, photo, caption=response_text)
-                print(f"Картинка {image_path} отправлена для кнопки Промо.")
-            else:
-                print(f"Файл картинки {image_path} не найден для кнопки Промо. Отправляю только текст.")
-                await context.bot.send_message(chat_id, response_text)
+            await send_cached_photo_or_message(context, chat_id, image_path, response_text)
         except Exception as e:
             print(f"Ошибка при отправке картинки или текста для кнопки Промо: {e}")
             await context.bot.send_message(chat_id, response_text)
