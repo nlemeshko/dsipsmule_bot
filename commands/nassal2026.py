@@ -140,34 +140,18 @@ async def send_nassal_intro(context: ContextTypes.DEFAULT_TYPE, chat_id: int, re
 
 
 async def send_category_guide(context: ContextTypes.DEFAULT_TYPE, chat_id: int):
-    """Отправляет описание корзин с иконками маскотов."""
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=NASSAL_CATEGORY_INTRO_TEXT,
-        parse_mode='HTML',
-    )
+    """Отправляет текстовое описание корзин без изображений."""
+    basket_lines = [NASSAL_CATEGORY_INTRO_TEXT, ""]
 
     for choice in ("1", "2", "3", "4"):
-        basket = NASSAL_BASKETS[choice]
-        photo = build_binary_stream(basket["image_path"])
-        caption = get_basket_caption(choice)
-        if photo:
-            await context.bot.send_photo(
-                chat_id=chat_id,
-                photo=photo,
-                caption=caption,
-                parse_mode='HTML',
-            )
-        else:
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=caption,
-                parse_mode='HTML',
-            )
+        basket_lines.append(get_basket_caption(choice))
+        basket_lines.append("")
+
+    basket_lines.append("Отправь одним сообщением число <b>1</b>, <b>2</b>, <b>3</b> или <b>4</b>.")
 
     await context.bot.send_message(
         chat_id=chat_id,
-        text="Отправь одним сообщением число <b>1</b>, <b>2</b>, <b>3</b> или <b>4</b>.",
+        text="\n".join(basket_lines),
         parse_mode='HTML',
     )
 
