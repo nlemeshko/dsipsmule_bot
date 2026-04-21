@@ -34,6 +34,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Убираем шум от polling HTTP-запросов Telegram API, сохраняя INFO-логи самого бота.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("telegram").setLevel(logging.WARNING)
+
 # Получаем токен бота
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 if not BOT_TOKEN:
