@@ -45,6 +45,7 @@ from storage.s3_registry import (
     append_registration_row,
     build_registration_row,
     load_registration_rows,
+    upload_avatar_bytes,
 )
 
 
@@ -134,6 +135,19 @@ async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
             else:
                 await send_to_admins(context, admin_message)
 
+            avatar_url = None
+            if avatar_file_id:
+                try:
+                    avatar = await context.bot.get_file(avatar_file_id)
+                    avatar_bytes = bytes(await avatar.download_as_bytearray())
+                    avatar_url = await asyncio.to_thread(
+                        upload_avatar_bytes,
+                        avatar_bytes,
+                        avatar.file_path,
+                    )
+                except Exception as exc:
+                    logger.exception("Не удалось загрузить аватар в Object Storage: %s", exc)
+
             s3_row = build_registration_row(
                 user_id=user_id,
                 username=update.effective_user.username,
@@ -141,7 +155,7 @@ async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 participants=registration["participants"],
                 category_code=category_choice,
                 category_name=basket_full_name,
-                avatar_file_id=avatar_file_id,
+                avatar_url=avatar_url,
             )
             try:
                 await asyncio.to_thread(append_registration_row, s3_row)

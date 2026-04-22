@@ -77,6 +77,9 @@ GROUP_ID=-1001234567890
 # Hetzner Object Storage credentials for NASSAL2026 registrations
 S3_ACCESS_KEY=your_object_storage_access_key
 S3_SECRET_KEY=your_object_storage_secret_key
+
+# Optional public base URL for uploaded NASSAL2026 avatars
+S3_PUBLIC_BASE_URL=https://cdn.example.com/nassal2026
 ```
 
 ### 4. Получение ID канала и группы
