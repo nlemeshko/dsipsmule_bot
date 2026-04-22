@@ -67,7 +67,9 @@ NASSAL_CATEGORY_INTRO_TEXT = """🎼 <b>Супер, аватар получен.
 <b>Шаг 3 из 4.</b>
 Теперь выбери корзину и отправь <b>число от 1 до 4</b>.
 
-Ниже я покажу все корзины конкурса вместе с маскотами сезона."""
+Ниже собраны все корзины конкурса и маскоты сезона.
+
+<i>Выбирай корзину с умом: ориентируйся на свой стиль, подачу и настроение номера.</i>"""
 
 NASSAL_CONFIRM_TEXT = """📋 <b>Проверь, пожалуйста, заявку на NASSAL2026</b>
 
@@ -87,7 +89,7 @@ NASSAL_SUCCESS_TEXT = """🎉 <b>Поздравляем!</b>
 
 def build_baskets_status_text(registrations: list[dict]) -> str:
     """Собирает сводку по корзинам и зарегистрированным участникам."""
-    basket_lines = ["", "<b>Текущее состояние корзин:</b>"]
+    basket_lines = ["<b>📊 Текущее состояние корзин</b>", ""]
 
     for choice in ("1", "2", "3", "4"):
         basket = NASSAL_BASKETS[choice]
@@ -102,9 +104,11 @@ def build_baskets_status_text(registrations: list[dict]) -> str:
         ]
         participants_text = ", ".join(participants) if participants else "пока никого"
         basket_lines.append(
-            f"\n<b>{choice}. {escape(basket['name'])}</b> ({len(basket_rows)})\n"
+            f"<b>{choice}. {escape(basket['name'])}</b> — {len(basket_rows)}\n"
             f"{participants_text}"
         )
+        if choice != "4":
+            basket_lines.append("")
 
     return "\n".join(basket_lines)
 
@@ -145,17 +149,24 @@ async def send_category_guide(
     registrations: list[dict] | None = None,
 ):
     """Отправляет текстовое описание корзин без изображений."""
-    basket_lines = [NASSAL_CATEGORY_INTRO_TEXT, ""]
+    basket_lines = [
+        NASSAL_CATEGORY_INTRO_TEXT,
+        "",
+        "<b>🎭 Корзины конкурса</b>",
+        "",
+    ]
 
     for choice in ("1", "2", "3", "4"):
         basket_lines.append(get_basket_caption(choice))
         basket_lines.append("")
 
     if registrations is not None:
+        basket_lines.append("━━━━━━━━━━━━")
+        basket_lines.append("")
         basket_lines.append(build_baskets_status_text(registrations).strip())
         basket_lines.append("")
 
-    basket_lines.append("Отправь одним сообщением число <b>1</b>, <b>2</b>, <b>3</b> или <b>4</b>.")
+    basket_lines.append("Отправь одним сообщением <b>1</b>, <b>2</b>, <b>3</b> или <b>4</b>.")
 
     await context.bot.send_message(
         chat_id=chat_id,
