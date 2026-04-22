@@ -45,6 +45,7 @@ from storage.s3_registry import (
     append_registration_row,
     build_registration_row,
     load_registration_rows,
+    registration_exists,
     upload_avatar_bytes,
 )
 
@@ -157,10 +158,24 @@ async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 category_name=basket_full_name,
                 avatar_url=avatar_url,
             )
+            registration_saved = False
             try:
                 await asyncio.to_thread(append_registration_row, s3_row)
+                registration_saved = await asyncio.to_thread(
+                    registration_exists,
+                    user_id,
+                    registration["participants"],
+                    category_choice,
+                )
             except Exception as exc:
                 logger.exception("Не удалось сохранить регистрацию в Object Storage: %s", exc)
+
+            if not registration_saved:
+                await msg.reply_text(
+                    "Не удалось надёжно сохранить регистрацию в конкурсе.\n\n"
+                    "Пожалуйста, попробуйте отправить подтверждение ещё раз чуть позже."
+                )
+                return
 
             await send_success_message(context, msg.chat_id)
             context.user_data.pop("nassal_registration", None)

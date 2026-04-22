@@ -117,6 +117,22 @@ def find_registration_by_user_id(user_id: int) -> dict | None:
     return None
 
 
+def registration_exists(user_id: int, participants: str, category_code: str) -> bool:
+    """Проверяет, что регистрация пользователя действительно присутствует в CSV."""
+    user_id_str = str(user_id)
+    normalized_participants = participants.strip()
+    normalized_category_code = category_code.strip()
+
+    for row in load_registration_rows():
+        if (
+            row.get("telegram_user_id", "") == user_id_str
+            and (row.get("participants", "") or "").strip() == normalized_participants
+            and (row.get("category_code", "") or "").strip() == normalized_category_code
+        ):
+            return True
+    return False
+
+
 def delete_registration_by_user_id(user_id: int) -> dict | None:
     """Удаляет регистрацию пользователя по Telegram user_id и возвращает удалённую строку."""
     client = _get_s3_client()
