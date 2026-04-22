@@ -138,16 +138,52 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await context.bot.send_message(chat_id, response_text)
 
     elif query.data == "button_nassal2026":
-        from commands.nassal2026 import send_nassal_intro
-
-        user_states[user_id] = NASSAL_NAMES_STATE
-        context.user_data.pop("nassal_registration", None)
+        from commands.nassal2026 import start_nassal_registration
 
         try:
-            await send_nassal_intro(context, chat_id)
+            await start_nassal_registration(update, context)
         except Exception as e:
             print(f"Ошибка при запуске регистрации NASSAL2026: {e}")
             await context.bot.send_message(
                 chat_id,
                 "🏆 Добро пожаловать на конкурс NASSAL2026!\n\nНапишите, пожалуйста, одно имя или два имени участников."
+            )
+
+    elif query.data == "nassal_show_status":
+        from storage.s3_registry import load_registration_rows
+        from commands.nassal2026 import send_baskets_status_message
+
+        try:
+            registrations = await asyncio.to_thread(load_registration_rows)
+            await send_baskets_status_message(context, chat_id, registrations)
+        except Exception as e:
+            print(f"Ошибка при загрузке состояния корзин NASSAL2026: {e}")
+            await context.bot.send_message(
+                chat_id,
+                "Не удалось загрузить состояние корзин. Попробуйте чуть позже."
+            )
+
+    elif query.data == "nassal_delete_registration":
+        from storage.s3_registry import delete_registration_by_user_id
+
+        try:
+            deleted_registration = await asyncio.to_thread(delete_registration_by_user_id, user_id)
+            context.user_data.pop("nassal_registration", None)
+            user_states.pop(user_id, None)
+            if deleted_registration is None:
+                await context.bot.send_message(
+                    chat_id,
+                    "Похоже, активная регистрация уже не найдена."
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id,
+                    "🗑️ Ваша регистрация на NASSAL2026 удалена.\n\n"
+                    "Если захотите зарегистрироваться заново, просто отправьте /nassal2026."
+                )
+        except Exception as e:
+            print(f"Ошибка при удалении регистрации NASSAL2026: {e}")
+            await context.bot.send_message(
+                chat_id,
+                "Не удалось удалить регистрацию. Попробуйте чуть позже."
             )

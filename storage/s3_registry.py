@@ -108,6 +108,46 @@ def load_registration_rows() -> list[dict]:
         raise
 
 
+def find_registration_by_user_id(user_id: int) -> dict | None:
+    """Ищет регистрацию пользователя по Telegram user_id."""
+    user_id_str = str(user_id)
+    for row in load_registration_rows():
+        if row.get("telegram_user_id", "") == user_id_str:
+            return row
+    return None
+
+
+def delete_registration_by_user_id(user_id: int) -> dict | None:
+    """Удаляет регистрацию пользователя по Telegram user_id и возвращает удалённую строку."""
+    client = _get_s3_client()
+    user_id_str = str(user_id)
+    rows = load_registration_rows()
+
+    deleted_row = None
+    remaining_rows = []
+    for row in rows:
+        if deleted_row is None and row.get("telegram_user_id", "") == user_id_str:
+            deleted_row = row
+            continue
+        remaining_rows.append(row)
+
+    if deleted_row is None:
+        return None
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=CSV_HEADERS)
+    writer.writeheader()
+    writer.writerows(remaining_rows)
+
+    client.put_object(
+        Bucket=S3_BUCKET_NAME,
+        Key=S3_REGISTRATIONS_KEY,
+        Body=output.getvalue().encode("utf-8"),
+        ContentType="text/csv; charset=utf-8",
+    )
+    return deleted_row
+
+
 def build_registration_row(
     user_id: int,
     username: str | None,

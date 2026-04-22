@@ -4,6 +4,7 @@
 Регистрация на вокальный конкурс NASSAL2026.
 """
 
+import asyncio
 from html import escape
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -14,6 +15,7 @@ from commands.callback_handler import (
     NASSAL_NAMES_STATE,
 )
 from commands.common import build_binary_stream
+from storage.s3_registry import find_registration_by_user_id
 
 
 NASSAL_IMAGE_PATH = 'images/nassal2026.png'
@@ -85,6 +87,13 @@ NASSAL_SUCCESS_TEXT = """🎉 <b>Поздравляем!</b>
 
 Заявка уже отправлена администраторам конкурса.
 Переходите в официальный чат участников по ссылке ниже:"""
+
+NASSAL_ALREADY_REGISTERED_TEXT = """✅ <b>Ты уже зарегистрирован(а) на NASSAL2026</b>
+
+<b>Участник(и):</b> {participants}
+<b>Корзина:</b> {category_name}
+
+Если хочешь, можешь посмотреть текущее состояние корзин или удалить свою регистрацию."""
 
 
 def build_baskets_status_text(registrations: list[dict]) -> str:
@@ -213,6 +222,42 @@ async def send_success_message(context: ContextTypes.DEFAULT_TYPE, chat_id: int)
     )
 
 
+async def send_registered_actions(context: ContextTypes.DEFAULT_TYPE, chat_id: int, registration: dict):
+    """Показывает меню действий, если пользователь уже зарегистрирован."""
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Показать состояние корзин", callback_data="nassal_show_status")],
+        [InlineKeyboardButton("Удалиться", callback_data="nassal_delete_registration")],
+    ])
+    text = NASSAL_ALREADY_REGISTERED_TEXT.format(
+        participants=escape(registration.get("participants", "Не указано")),
+        category_name=escape(registration.get("category_name", "Не указана")),
+    )
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        parse_mode='HTML',
+        reply_markup=keyboard,
+    )
+
+
+async def send_baskets_status_message(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    registrations: list[dict],
+):
+    """Отправляет отдельное сообщение с текущим состоянием корзин."""
+    text = (
+        "<b>🎭 Корзины NASSAL2026</b>\n\n"
+        "Выбирай корзину с умом: ориентируйся на свой стиль, подачу и настроение номера.\n\n"
+        f"{build_baskets_status_text(registrations)}"
+    )
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        parse_mode='HTML',
+    )
+
+
 async def start_nassal_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Запускает пошаговую регистрацию на конкурс."""
     user_id = update.effective_user.id
@@ -223,6 +268,16 @@ async def start_nassal_registration(update: Update, context: ContextTypes.DEFAUL
         await msg.reply_text(
             "Регистрация на NASSAL2026 доступна в личных сообщениях с ботом. Напишите мне в личку и отправьте /nassal2026."
         )
+        return
+
+    existing_registration = None
+    try:
+        existing_registration = await asyncio.to_thread(find_registration_by_user_id, user_id)
+    except Exception:
+        existing_registration = None
+
+    if existing_registration is not None:
+        await send_registered_actions(context, chat.id, existing_registration)
         return
 
     user_states[user_id] = NASSAL_NAMES_STATE
