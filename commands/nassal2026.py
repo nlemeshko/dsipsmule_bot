@@ -139,12 +139,20 @@ async def send_nassal_intro(context: ContextTypes.DEFAULT_TYPE, chat_id: int, re
         )
 
 
-async def send_category_guide(context: ContextTypes.DEFAULT_TYPE, chat_id: int):
+async def send_category_guide(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    registrations: list[dict] | None = None,
+):
     """Отправляет текстовое описание корзин без изображений."""
     basket_lines = [NASSAL_CATEGORY_INTRO_TEXT, ""]
 
     for choice in ("1", "2", "3", "4"):
         basket_lines.append(get_basket_caption(choice))
+        basket_lines.append("")
+
+    if registrations is not None:
+        basket_lines.append(build_baskets_status_text(registrations).strip())
         basket_lines.append("")
 
     basket_lines.append("Отправь одним сообщением число <b>1</b>, <b>2</b>, <b>3</b> или <b>4</b>.")
@@ -181,21 +189,14 @@ async def send_registration_summary(context: ContextTypes.DEFAULT_TYPE, chat_id:
         )
 
 
-async def send_success_message(
-    context: ContextTypes.DEFAULT_TYPE,
-    chat_id: int,
-    registrations: list[dict] | None = None,
-):
+async def send_success_message(context: ContextTypes.DEFAULT_TYPE, chat_id: int):
     """Отправляет финальное поздравление и ссылку на чат конкурса."""
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("Перейти в чат NASSAL2026", url=NASSAL_JOIN_URL)]
     ])
-    text = NASSAL_SUCCESS_TEXT
-    if registrations is not None:
-        text = f"{text}{build_baskets_status_text(registrations)}"
     await context.bot.send_message(
         chat_id=chat_id,
-        text=text,
+        text=NASSAL_SUCCESS_TEXT,
         parse_mode='HTML',
         reply_markup=keyboard,
     )

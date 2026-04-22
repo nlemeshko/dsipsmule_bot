@@ -143,14 +143,12 @@ async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 category_name=basket_full_name,
                 avatar_file_id=avatar_file_id,
             )
-            registrations = None
             try:
                 await asyncio.to_thread(append_registration_row, s3_row)
-                registrations = await asyncio.to_thread(load_registration_rows)
             except Exception as exc:
                 logger.exception("Не удалось сохранить регистрацию в Object Storage: %s", exc)
 
-            await send_success_message(context, msg.chat_id, registrations=registrations)
+            await send_success_message(context, msg.chat_id)
             context.user_data.pop("nassal_registration", None)
             user_states.pop(user_id, None)
             return
@@ -236,7 +234,12 @@ async def handle_anon_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         registration = context.user_data.setdefault("nassal_registration", {})
         registration["avatar_file_id"] = photo_id
         user_states[user_id] = NASSAL_CATEGORY_STATE
-        await send_category_guide(context, msg.chat_id)
+        registrations = None
+        try:
+            registrations = await asyncio.to_thread(load_registration_rows)
+        except Exception as exc:
+            logger.exception("Не удалось загрузить регистрации из Object Storage: %s", exc)
+        await send_category_guide(context, msg.chat_id, registrations=registrations)
         return
 
     if user_states.get(user_id) == ANON_STATE:
