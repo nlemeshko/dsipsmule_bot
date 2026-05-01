@@ -46,6 +46,7 @@ from storage.s3_registry import (
     build_registration_row,
     load_registration_rows,
     registration_exists,
+    _normalize_participants,
     upload_avatar_bytes,
 )
 
@@ -79,7 +80,7 @@ async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return
 
     elif user_states.get(user_id) == NASSAL_NAMES_STATE:
-        participants = msg.text.strip() if (msg and msg.text) else ""
+        participants = _normalize_participants(msg.text if (msg and msg.text) else "")
         if not participants:
             await msg.reply_text("Пожалуйста, напишите одно имя или два имени участников текстом.")
             return

@@ -9,6 +9,7 @@ import io
 import logging
 import mimetypes
 import os
+import re
 from pathlib import Path
 from datetime import datetime, UTC
 from uuid import uuid4
@@ -120,13 +121,13 @@ def find_registration_by_user_id(user_id: int) -> dict | None:
 def registration_exists(user_id: int, participants: str, category_code: str) -> bool:
     """Проверяет, что регистрация пользователя действительно присутствует в CSV."""
     user_id_str = str(user_id)
-    normalized_participants = participants.strip()
+    normalized_participants = _normalize_participants(participants)
     normalized_category_code = category_code.strip()
 
     for row in load_registration_rows():
         if (
             row.get("telegram_user_id", "") == user_id_str
-            and (row.get("participants", "") or "").strip() == normalized_participants
+            and _normalize_participants(row.get("participants", "")) == normalized_participants
             and (row.get("category_code", "") or "").strip() == normalized_category_code
         ):
             return True
@@ -179,7 +180,7 @@ def build_registration_row(
         "telegram_user_id": str(user_id),
         "telegram_username": username or "",
         "telegram_full_name": full_name or "",
-        "participants": participants,
+        "participants": _normalize_participants(participants),
         "category_code": category_code,
         "category_name": category_name,
         "avatar_url": avatar_url or "",
@@ -217,9 +218,15 @@ def upload_avatar_bytes(
 def _normalize_registration_row(row: dict) -> dict:
     """Приводит старые и новые строки CSV к актуальной схеме."""
     normalized = {header: row.get(header, "") for header in CSV_HEADERS}
+    normalized["participants"] = _normalize_participants(normalized["participants"])
     if not normalized["avatar_url"]:
         normalized["avatar_url"] = row.get("avatar_file_id", "")
     return normalized
+
+
+def _normalize_participants(value: str | None) -> str:
+    """Схлопывает переносы строк и повторяющиеся пробелы в имени участника."""
+    return re.sub(r"\s+", " ", (value or "")).strip()
 
 
 def _resolve_avatar_extension(
