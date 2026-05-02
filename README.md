@@ -74,6 +74,15 @@ CHANNEL_ID=-1001234567890
 # ID группы (начинается с -100)  
 GROUP_ID=-1001234567890
 
+# Public Smule profile for the "Песня дня" button
+SMULE_USERNAME=smule_user
+
+# Optional direct JSON endpoint if you want to override the default profile URL
+SMULE_PERFORMANCES_URL=
+
+# Legacy fallback: old internal accountId API, may already return 403
+SMULE_ACCOUNT_ID=
+
 # Hetzner Object Storage credentials for NASSAL2026 registrations
 S3_ACCESS_KEY=your_object_storage_access_key
 S3_SECRET_KEY=your_object_storage_secret_key
@@ -221,6 +230,12 @@ self.application.add_handler(CommandHandler("mycommand", mycommand_command))
 1. Убедитесь, что токен бота правильный
 2. Проверьте, что бот добавлен как администратор в канал/группу
 3. Убедитесь, что файл `.env` существует и содержит правильные значения
+
+### Кнопка "Песня дня" показывает ошибку 403
+
+Smule периодически закрывает внутренние API по `accountId`, поэтому кнопка теперь настроена на публичный профильный JSON-эндпоинт. Укажите в `.env` переменную `SMULE_USERNAME` со значением имени профиля Smule без `@`.
+
+Если публичный JSON-эндпоинт тоже будет недоступен, бот отправит запасной вариант песни из Last.fm вместо технической ошибки.
 
 ### Ошибка "BOT_TOKEN не найден"
 

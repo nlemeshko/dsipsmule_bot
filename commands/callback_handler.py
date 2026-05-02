@@ -5,12 +5,14 @@
 """
 
 import asyncio
+import os
 import time
 import random
 import requests
 from telegram import Update, CallbackQuery
 from telegram.ext import ContextTypes
 from commands.common import build_binary_stream
+from commands.entertainment import get_random_russian_song
 
 # FSM состояния
 ANON_STATE = 'anon_waiting_text'
@@ -39,13 +41,49 @@ async def send_cached_photo_or_message(context, chat_id: int, image_path: str, r
 
 
 def fetch_song_of_the_day():
+    smule_username = os.getenv('SMULE_USERNAME', '').strip().lstrip('@')
+    smule_performances_url = os.getenv('SMULE_PERFORMANCES_URL', '').strip()
+    smule_account_id = os.getenv('SMULE_ACCOUNT_ID', '').strip()
+
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Referer': 'https://www.smule.com/',
     }
-    url = 'https://www.smule.com/api/profile/performances?accountId=96242367&appUid=sing&offset=0&limit=25'
-    resp = requests.get(url, headers=headers, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
+
+    candidate_urls = []
+    if smule_performances_url:
+        candidate_urls.append(smule_performances_url)
+    if smule_username:
+        candidate_urls.append(
+            f'https://www.smule.com/{smule_username}/performances/json?offset=0&limit=25'
+        )
+    if smule_account_id:
+        candidate_urls.append(
+            f'https://www.smule.com/api/profile/performances?accountId={smule_account_id}&appUid=sing&offset=0&limit=25'
+        )
+
+    if not candidate_urls:
+        raise RuntimeError(
+            "Не настроен источник песен Smule. Укажите SMULE_USERNAME, "
+            "SMULE_PERFORMANCES_URL или SMULE_ACCOUNT_ID в .env."
+        )
+
+    last_error = None
+    for url in candidate_urls:
+        try:
+            resp = requests.get(url, headers=headers, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            songs = data.get('list', [])
+            if songs:
+                return data
+        except Exception as exc:
+            last_error = exc
+
+    if last_error:
+        raise last_error
+    return {'list': []}
 
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик callback'ов от кнопок"""
@@ -107,15 +145,18 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             data = await asyncio.to_thread(fetch_song_of_the_day)
             songs = data.get('list', [])
             if not songs:
-                print("Не удалось получить список песен с Smule API")
-                await context.bot.send_message(chat_id, "Не удалось получить список песен.")
-                return
+                raise RuntimeError("Smule не вернул список песен")
             song = random.choice(songs)
             title = song.get('title', 'Без названия')
             artist = song.get('artist', '')
             web_url = song.get('web_url', '')
             cover_url = song.get('cover_url', '')
-            msg = f"🎲 Песня дня:\n<b>{title}</b> — {artist}\nhttps://www.smule.com{web_url}"
+            song_url = web_url
+            if song_url and song_url.startswith('/'):
+                song_url = f"https://www.smule.com{song_url}"
+            msg = f"🎲 Песня дня:\n<b>{title}</b> — {artist}"
+            if song_url:
+                msg += f"\n{song_url}"
             print(f"Песня дня для {user_id}: {title} — {artist}")
             if cover_url:
                 await context.bot.send_photo(chat_id, cover_url, caption=msg, parse_mode='HTML')
@@ -123,7 +164,18 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 await context.bot.send_message(chat_id, msg, parse_mode='HTML')
         except Exception as e:
             print(f"Ошибка при получении песни дня: {e}")
-            await context.bot.send_message(chat_id, f"Ошибка при получении песни: {e}")
+            fallback_title, fallback_artist, fallback_link = await asyncio.to_thread(get_random_russian_song)
+            if fallback_title:
+                fallback_msg = (
+                    f"🎲 Песня дня:\n<b>{fallback_title}</b> — {fallback_artist}\n\n"
+                    f"Smule сейчас не отвечает, поэтому вот запасной вариант:\n{fallback_link}"
+                )
+                await context.bot.send_message(chat_id, fallback_msg, parse_mode='HTML')
+            else:
+                await context.bot.send_message(
+                    chat_id,
+                    "Не удалось получить песню дня ни из Smule, ни из резервного источника."
+                )
             
     elif query.data == "button6":
         # Промо
