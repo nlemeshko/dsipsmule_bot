@@ -41,14 +41,12 @@ async def send_cached_photo_or_message(context, chat_id: int, image_path: str, r
 
 
 def fetch_song_of_the_day():
-    smule_username = os.getenv('SMULE_USERNAME', '').strip().lstrip('@')
     smule_performances_url = os.getenv('SMULE_PERFORMANCES_URL', '').strip()
     smule_account_id = os.getenv('SMULE_ACCOUNT_ID', '').strip()
-    if '_hot_dsip/performances/json' in smule_performances_url:
-        smule_performances_url = ''
+    default_account_id = smule_account_id or '96242367'
     default_smule_api_url = (
         'https://www.smule.com/api/profile/performances'
-        '?accountId=96242367&appUid=sing&offset=0&limit=12'
+        f'?accountId={default_account_id}&appUid=sing&offset=0&limit=12'
     )
 
     headers = {
@@ -57,36 +55,13 @@ def fetch_song_of_the_day():
         'Referer': 'https://www.smule.com/',
     }
 
-    # Prefer the known-working accountId endpoint and do not automatically
-    # fall through to profile JSON URLs, since those may return 403.
-    candidate_urls = [smule_performances_url or default_smule_api_url]
-    if smule_account_id:
-        account_id_url = (
-            f'https://www.smule.com/api/profile/performances'
-            f'?accountId={smule_account_id}&appUid=sing&offset=0&limit=12'
-        )
-        if account_id_url not in candidate_urls:
-            candidate_urls.append(account_id_url)
-    if smule_username and smule_performances_url:
-        candidate_urls.append(
-            f'https://www.smule.com/{smule_username}/performances/json?offset=0&limit=25'
-        )
+    request_url = smule_performances_url or default_smule_api_url
+    if '_hot_dsip/performances/json' in request_url:
+        request_url = default_smule_api_url
 
-    last_error = None
-    for url in candidate_urls:
-        try:
-            resp = requests.get(url, headers=headers, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
-            songs = data.get('list', [])
-            if songs:
-                return data
-        except Exception as exc:
-            last_error = exc
-
-    if last_error:
-        raise last_error
-    return {'list': []}
+    resp = requests.get(request_url, headers=headers, timeout=10)
+    resp.raise_for_status()
+    return resp.json()
 
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик callback'ов от кнопок"""
