@@ -50,16 +50,31 @@ def fetch_song_of_the_day():
     )
 
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'User-Agent': (
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) '
+            'Chrome/124.0.0.0 Safari/537.36'
+        ),
         'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9,ru;q=0.8',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
         'Referer': 'https://www.smule.com/',
+        'Origin': 'https://www.smule.com',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-origin',
+        'X-Requested-With': 'XMLHttpRequest',
     }
 
     request_url = smule_performances_url or default_smule_api_url
     if '_hot_dsip/performances/json' in request_url:
         request_url = default_smule_api_url
 
-    resp = requests.get(request_url, headers=headers, timeout=10)
+    session = requests.Session()
+    session.headers.update(headers)
+    session.cookies.set('app', 'sing', domain='www.smule.com')
+    resp = session.get(request_url, timeout=10)
     resp.raise_for_status()
     return resp.json()
 

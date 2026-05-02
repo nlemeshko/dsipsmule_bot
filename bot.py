@@ -125,16 +125,6 @@ class TelegramBot:
     async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик ошибок"""
         logger.error(f"Ошибка при обработке обновления {update}: {context.error}")
-        
-        # Попытка отправить сообщение об ошибке пользователю
-        try:
-            if update and update.effective_chat:
-                await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text="😅 Произошла ошибка при обработке сообщения. Попробуйте еще раз!"
-                )
-        except Exception as e:
-            logger.error(f"Не удалось отправить сообщение об ошибке: {e}")
     
     def run(self):
         """Запуск бота"""
