@@ -44,6 +44,10 @@ def fetch_song_of_the_day():
     smule_username = os.getenv('SMULE_USERNAME', '').strip().lstrip('@')
     smule_performances_url = os.getenv('SMULE_PERFORMANCES_URL', '').strip()
     smule_account_id = os.getenv('SMULE_ACCOUNT_ID', '').strip()
+    default_smule_api_url = (
+        'https://www.smule.com/api/profile/performances'
+        '?accountId=96242367&appUid=sing&offset=0&limit=12'
+    )
 
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -54,19 +58,15 @@ def fetch_song_of_the_day():
     candidate_urls = []
     if smule_performances_url:
         candidate_urls.append(smule_performances_url)
+    else:
+        candidate_urls.append(default_smule_api_url)
     if smule_username:
         candidate_urls.append(
             f'https://www.smule.com/{smule_username}/performances/json?offset=0&limit=25'
         )
     if smule_account_id:
         candidate_urls.append(
-            f'https://www.smule.com/api/profile/performances?accountId={smule_account_id}&appUid=sing&offset=0&limit=25'
-        )
-
-    if not candidate_urls:
-        raise RuntimeError(
-            "Не настроен источник песен Smule. Укажите SMULE_USERNAME, "
-            "SMULE_PERFORMANCES_URL или SMULE_ACCOUNT_ID в .env."
+            f'https://www.smule.com/api/profile/performances?accountId={smule_account_id}&appUid=sing&offset=0&limit=12'
         )
 
     last_error = None
