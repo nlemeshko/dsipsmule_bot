@@ -231,5 +231,3 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 chat_id,
                 "Не удалось удалить регистрацию. Попробуйте чуть позже."
             )
-    if '_hot_dsip/performances/json' in smule_performances_url:
-        smule_performances_url = ''
