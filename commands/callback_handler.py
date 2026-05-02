@@ -44,6 +44,8 @@ def fetch_song_of_the_day():
     smule_username = os.getenv('SMULE_USERNAME', '').strip().lstrip('@')
     smule_performances_url = os.getenv('SMULE_PERFORMANCES_URL', '').strip()
     smule_account_id = os.getenv('SMULE_ACCOUNT_ID', '').strip()
+    if '_hot_dsip/performances/json' in smule_performances_url:
+        smule_performances_url = ''
     default_smule_api_url = (
         'https://www.smule.com/api/profile/performances'
         '?accountId=96242367&appUid=sing&offset=0&limit=12'
@@ -55,18 +57,19 @@ def fetch_song_of_the_day():
         'Referer': 'https://www.smule.com/',
     }
 
-    candidate_urls = []
-    if smule_performances_url:
-        candidate_urls.append(smule_performances_url)
-    else:
-        candidate_urls.append(default_smule_api_url)
-    if smule_username:
+    # Prefer the known-working accountId endpoint and do not automatically
+    # fall through to profile JSON URLs, since those may return 403.
+    candidate_urls = [smule_performances_url or default_smule_api_url]
+    if smule_account_id:
+        account_id_url = (
+            f'https://www.smule.com/api/profile/performances'
+            f'?accountId={smule_account_id}&appUid=sing&offset=0&limit=12'
+        )
+        if account_id_url not in candidate_urls:
+            candidate_urls.append(account_id_url)
+    if smule_username and smule_performances_url:
         candidate_urls.append(
             f'https://www.smule.com/{smule_username}/performances/json?offset=0&limit=25'
-        )
-    if smule_account_id:
-        candidate_urls.append(
-            f'https://www.smule.com/api/profile/performances?accountId={smule_account_id}&appUid=sing&offset=0&limit=12'
         )
 
     last_error = None
@@ -167,8 +170,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             fallback_title, fallback_artist, fallback_link = await asyncio.to_thread(get_random_russian_song)
             if fallback_title:
                 fallback_msg = (
-                    f"🎲 Песня дня:\n<b>{fallback_title}</b> — {fallback_artist}\n\n"
-                    f"Smule сейчас не отвечает, поэтому вот запасной вариант:\n{fallback_link}"
+                    f"🎲 Песня дня:\n<b>{fallback_title}</b> — {fallback_artist}\n{fallback_link}"
                 )
                 await context.bot.send_message(chat_id, fallback_msg, parse_mode='HTML')
             else:
@@ -239,3 +241,5 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 chat_id,
                 "Не удалось удалить регистрацию. Попробуйте чуть позже."
             )
+    if '_hot_dsip/performances/json' in smule_performances_url:
+        smule_performances_url = ''
