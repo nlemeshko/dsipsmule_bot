@@ -116,6 +116,16 @@ NASSAL_FIRST_STAGE_SUCCESS_TEXT = """✅ <b>Спасибо!</b>
 
 Твоя работа для <b>Этапа I</b> принята и передана администраторам."""
 
+NASSAL_FIRST_STAGE_ALREADY_EXISTS_TEXT = """📝 <b>Этап I</b>
+
+Твоя работа уже сохранена.
+
+<b>Участник(и):</b> {participants}
+<b>Корзина:</b> {category_name}
+<b>Ссылка на работу:</b> {work_url}
+
+Если хочешь отправить новую работу, сначала удали текущую."""
+
 
 def build_baskets_status_text(registrations: list[dict]) -> str:
     """Собирает сводку по корзинам и зарегистрированным участникам."""
@@ -328,6 +338,32 @@ async def start_first_stage_submission(update: Update, context: ContextTypes.DEF
         registration = await asyncio.to_thread(find_registration_by_user_id, user_id)
     except Exception:
         registration = None
+
+    from storage.s3_registry import find_first_stage_submission_by_user_id
+
+    existing_submission = None
+    try:
+        existing_submission = await asyncio.to_thread(find_first_stage_submission_by_user_id, user_id)
+    except Exception:
+        existing_submission = None
+
+    if existing_submission is not None:
+        _, submission = existing_submission
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Удалить работу", callback_data="nassal_first_stage_delete")]
+        ])
+        text = NASSAL_FIRST_STAGE_ALREADY_EXISTS_TEXT.format(
+            participants=escape(submission.get("participants", "Не указано")),
+            category_name=escape(submission.get("category_name", "Не указана") or "other"),
+            work_url=escape(submission.get("work_url", "Не указана")),
+        )
+        await context.bot.send_message(
+            chat_id=chat.id,
+            text=text,
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+        return
 
     context.user_data["nassal_first_stage"] = {
         "registration_found": registration is not None,

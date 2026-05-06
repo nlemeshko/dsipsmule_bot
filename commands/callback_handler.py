@@ -253,3 +253,29 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 chat_id,
                 "Не удалось удалить регистрацию. Попробуйте чуть позже."
             )
+
+    elif query.data == "nassal_first_stage_delete":
+        from storage.s3_registry import delete_first_stage_submission_by_user_id
+
+        try:
+            deleted_submission = await asyncio.to_thread(delete_first_stage_submission_by_user_id, user_id)
+            context.user_data.pop("nassal_first_stage", None)
+            user_states.pop(user_id, None)
+            if deleted_submission is None:
+                await context.bot.send_message(
+                    chat_id,
+                    "Похоже, сохранённая работа для Этапа I уже не найдена."
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id,
+                    "🗑️ Работа для Этапа I удалена.\n\n"
+                    "Нажми `Этап I` ещё раз, если хочешь отправить новую ссылку.",
+                    parse_mode="Markdown",
+                )
+        except Exception as e:
+            print(f"Ошибка при удалении работы Этапа I: {e}")
+            await context.bot.send_message(
+                chat_id,
+                "Не удалось удалить работу для Этапа I. Попробуйте чуть позже."
+            )

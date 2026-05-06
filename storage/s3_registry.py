@@ -260,6 +260,72 @@ def append_first_stage_submission_row(storage_key: str, submission: dict):
     )
 
 
+def load_first_stage_rows(storage_key: str) -> list[dict]:
+    """Возвращает все строки работ первого этапа из указанного CSV."""
+    client = _get_s3_client()
+
+    try:
+        response = client.get_object(Bucket=S3_BUCKET_NAME, Key=storage_key)
+        existing_csv = response["Body"].read().decode("utf-8")
+        reader = csv.DictReader(io.StringIO(existing_csv))
+        return [_normalize_first_stage_row(row) for row in reader]
+    except client.exceptions.NoSuchKey:
+        logger.info("CSV-файл первого этапа %s ещё не существует", storage_key)
+        return []
+    except Exception as exc:
+        error_code = getattr(exc, "response", {}).get("Error", {}).get("Code")
+        if error_code in {"NoSuchKey", "404"}:
+            logger.info("CSV-файл первого этапа %s ещё не существует", storage_key)
+            return []
+        raise
+
+
+def find_first_stage_submission_by_user_id(user_id: int) -> tuple[str, dict] | None:
+    """Ищет работу пользователя во всех CSV первого этапа."""
+    user_id_str = str(user_id)
+    for storage_key in _get_all_first_stage_storage_keys():
+        for row in load_first_stage_rows(storage_key):
+            if row.get("telegram_user_id", "") == user_id_str:
+                return storage_key, row
+    return None
+
+
+def delete_first_stage_submission_by_user_id(user_id: int) -> tuple[str, dict] | None:
+    """Удаляет работу пользователя из CSV первого этапа и возвращает удалённую строку."""
+    client = _get_s3_client()
+    found_submission = find_first_stage_submission_by_user_id(user_id)
+    if found_submission is None:
+        return None
+
+    storage_key, existing_row = found_submission
+    rows = load_first_stage_rows(storage_key)
+    user_id_str = str(user_id)
+
+    deleted_row = None
+    remaining_rows = []
+    for row in rows:
+        if deleted_row is None and row.get("telegram_user_id", "") == user_id_str:
+            deleted_row = row
+            continue
+        remaining_rows.append(row)
+
+    if deleted_row is None:
+        return None
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=FIRST_STAGE_HEADERS)
+    writer.writeheader()
+    writer.writerows(remaining_rows)
+
+    client.put_object(
+        Bucket=S3_BUCKET_NAME,
+        Key=storage_key,
+        Body=output.getvalue().encode("utf-8"),
+        ContentType="text/csv; charset=utf-8",
+    )
+    return storage_key, existing_row
+
+
 def build_first_stage_submission_row(
     user_id: int,
     username: str | None,
@@ -290,6 +356,17 @@ def get_first_stage_storage_key(category_code: str | None) -> str:
     if normalized_category_code in {"1", "2", "3", "4"}:
         return f"{S3_FIRST_STAGE_PREFIX}/{normalized_category_code}.csv"
     return f"{S3_FIRST_STAGE_PREFIX}/other.csv"
+
+
+def _get_all_first_stage_storage_keys() -> list[str]:
+    """Возвращает список всех CSV первого этапа."""
+    return [
+        f"{S3_FIRST_STAGE_PREFIX}/1.csv",
+        f"{S3_FIRST_STAGE_PREFIX}/2.csv",
+        f"{S3_FIRST_STAGE_PREFIX}/3.csv",
+        f"{S3_FIRST_STAGE_PREFIX}/4.csv",
+        f"{S3_FIRST_STAGE_PREFIX}/other.csv",
+    ]
 
 
 def _normalize_registration_row(row: dict) -> dict:
