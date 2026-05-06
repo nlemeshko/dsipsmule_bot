@@ -7,6 +7,7 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from commands.common import build_binary_stream
+from commands.admin_notifications import get_admin_ids
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /start"""
@@ -14,10 +15,16 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if chat_type == "private":
         # Создаем кнопочное меню для личных сообщений
-        keyboard = InlineKeyboardMarkup([
+        keyboard_rows = [
             [
                 InlineKeyboardButton("🏆 NASSAL2026", callback_data="button_nassal2026")
             ],
+        ]
+        if update.effective_user and update.effective_user.id in get_admin_ids():
+            keyboard_rows.append(
+                [InlineKeyboardButton("📝 Этап I", callback_data="button_nassal_first_stage")]
+            )
+        keyboard_rows.extend([
             [
                 InlineKeyboardButton("🕵 Анонимка", callback_data="button1"),
                 InlineKeyboardButton("🎶 Песня", callback_data="button2")
@@ -30,6 +37,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton("📢 Промо", callback_data="button6")
             ]
         ])
+        keyboard = InlineKeyboardMarkup(keyboard_rows)
         
         message = """🏆 <b>NASSAL2026 уже здесь!</b>
 

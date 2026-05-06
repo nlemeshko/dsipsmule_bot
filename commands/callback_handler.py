@@ -13,6 +13,7 @@ from telegram import Update, CallbackQuery
 from telegram.ext import ContextTypes
 from commands.common import build_binary_stream
 from commands.entertainment import get_random_russian_song
+from commands.admin_notifications import get_admin_ids
 
 # FSM состояния
 ANON_STATE = 'anon_waiting_text'
@@ -23,6 +24,7 @@ NASSAL_NAMES_STATE = 'nassal_waiting_names'
 NASSAL_AVATAR_STATE = 'nassal_waiting_avatar'
 NASSAL_CATEGORY_STATE = 'nassal_waiting_category'
 NASSAL_CONFIRM_STATE = 'nassal_waiting_confirm'
+NASSAL_FIRST_STAGE_LINK_STATE = 'nassal_first_stage_waiting_link'
 
 # Словари для отслеживания времени последнего запроса
 last_song_day_time = {}
@@ -191,6 +193,26 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await context.bot.send_message(
                 chat_id,
                 "🏆 Добро пожаловать на конкурс NASSAL2026!\n\nНапишите, пожалуйста, одно имя или два имени участников."
+            )
+
+    elif query.data == "button_nassal_first_stage":
+        from commands.nassal2026 import start_first_stage_submission
+
+        if user_id not in get_admin_ids():
+            await context.bot.send_message(
+                chat_id,
+                "Кнопка `Этап I` пока доступна только администраторам.",
+                parse_mode="Markdown",
+            )
+            return
+
+        try:
+            await start_first_stage_submission(update, context)
+        except Exception as e:
+            print(f"Ошибка при запуске Этапа I NASSAL2026: {e}")
+            await context.bot.send_message(
+                chat_id,
+                "Не удалось запустить отправку работы для Этапа I. Попробуйте чуть позже."
             )
 
     elif query.data == "nassal_show_status":

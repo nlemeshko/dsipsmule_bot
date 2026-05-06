@@ -21,6 +21,7 @@ from commands.callback_handler import (
     NASSAL_AVATAR_STATE,
     NASSAL_CATEGORY_STATE,
     NASSAL_CONFIRM_STATE,
+    NASSAL_FIRST_STAGE_LINK_STATE,
 )
 
 # Импорт функций отправки админам
@@ -29,6 +30,7 @@ from commands.admin_notifications import (
     send_anon_with_photo,
     send_anon_with_voice,
     send_photo_to_admins,
+    send_photo_url_to_admins,
     send_to_admins,
 )
 from commands.nassal2026 import (
@@ -40,10 +42,14 @@ from commands.nassal2026 import (
     send_category_guide,
     send_registration_summary,
     send_success_message,
+    NASSAL_FIRST_STAGE_SUCCESS_TEXT,
 )
 from storage.s3_registry import (
     append_registration_row,
+    append_first_stage_submission_row,
     build_registration_row,
+    build_first_stage_submission_row,
+    get_first_stage_storage_key,
     load_registration_rows,
     registration_exists,
     _normalize_participants,
@@ -193,6 +199,73 @@ async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return
 
         await msg.reply_text("Ответьте, пожалуйста, <b>да</b> или <b>нет</b>.", parse_mode='HTML')
+        return
+
+    elif user_states.get(user_id) == NASSAL_FIRST_STAGE_LINK_STATE:
+        work_url = msg.text.strip() if (msg and msg.text) else ""
+        if not work_url:
+            await msg.reply_text("Пришлите, пожалуйста, ссылку на работу одним сообщением.")
+            return
+
+        first_stage_data = context.user_data.get("nassal_first_stage", {})
+        registration = first_stage_data.get("registration")
+        registration_found = bool(first_stage_data.get("registration_found"))
+
+        participants = (
+            registration.get("participants")
+            if registration_found and registration
+            else (update.effective_user.full_name or "Неизвестный участник")
+        )
+        category_code = registration.get("category_code") if registration else ""
+        category_name = registration.get("category_name") if registration else "other"
+        storage_key = get_first_stage_storage_key(category_code if registration_found else None)
+
+        submission_row = build_first_stage_submission_row(
+            user_id=user_id,
+            username=update.effective_user.username,
+            full_name=update.effective_user.full_name,
+            participants=participants,
+            category_code=category_code if registration_found else "",
+            category_name=category_name if registration_found else "other",
+            work_url=work_url,
+        )
+
+        user_info = f"@{update.effective_user.username}" if update.effective_user.username else f"ID{user_id}"
+        admin_message = (
+            "📝 <b>Новая работа для Этапа I NASSAL2026</b>\n\n"
+            f"<b>Telegram:</b> {user_info}\n"
+            f"<b>Имя в Telegram:</b> {update.effective_user.full_name or 'Без имени'}\n"
+            f"<b>Участник(и):</b> {submission_row['participants']}\n"
+            f"<b>Корзина:</b> {submission_row['category_name'] or 'other'}\n"
+            f"<b>Найден в реестре:</b> {'да' if registration_found else 'нет'}\n"
+            f"<b>Ссылка на работу:</b> {submission_row['work_url']}"
+        )
+
+        try:
+            if registration_found and registration and (registration.get("avatar_url") or "").strip():
+                await send_photo_url_to_admins(
+                    context,
+                    registration["avatar_url"].strip(),
+                    admin_message,
+                )
+            else:
+                await send_to_admins(context, admin_message)
+
+            await asyncio.to_thread(
+                append_first_stage_submission_row,
+                storage_key,
+                submission_row,
+            )
+        except Exception as exc:
+            logger.exception("Не удалось сохранить работу Этапа I: %s", exc)
+            await msg.reply_text(
+                "Не удалось сохранить работу для Этапа I.\n\nПожалуйста, попробуйте отправить ссылку ещё раз чуть позже."
+            )
+            return
+
+        await msg.reply_text(NASSAL_FIRST_STAGE_SUCCESS_TEXT, parse_mode='HTML')
+        context.user_data.pop("nassal_first_stage", None)
+        user_states.pop(user_id, None)
         return
 
     # FSM: если пользователь предлагает песню

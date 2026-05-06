@@ -21,6 +21,7 @@ S3_ENDPOINT_URL = "https://nbg1.your-objectstorage.com"
 S3_BUCKET_NAME = "nassal2026"
 S3_REGISTRATIONS_KEY = "registrations/nassal2026_registrations.csv"
 S3_AVATARS_PREFIX = "avatars"
+S3_FIRST_STAGE_PREFIX = "first_stage"
 CSV_HEADERS = [
     "registered_at_utc",
     "telegram_user_id",
@@ -30,6 +31,16 @@ CSV_HEADERS = [
     "category_code",
     "category_name",
     "avatar_url",
+]
+FIRST_STAGE_HEADERS = [
+    "submitted_at_utc",
+    "telegram_user_id",
+    "telegram_username",
+    "telegram_full_name",
+    "participants",
+    "category_code",
+    "category_name",
+    "work_url",
 ]
 
 
@@ -215,12 +226,85 @@ def upload_avatar_bytes(
     return _build_public_object_url(object_key)
 
 
+def append_first_stage_submission_row(storage_key: str, submission: dict):
+    """Добавляет строку в CSV-файл работ первого этапа."""
+    client = _get_s3_client()
+
+    rows = []
+    try:
+        response = client.get_object(Bucket=S3_BUCKET_NAME, Key=storage_key)
+        existing_csv = response["Body"].read().decode("utf-8")
+        reader = csv.DictReader(io.StringIO(existing_csv))
+        rows.extend(_normalize_first_stage_row(row) for row in reader)
+    except client.exceptions.NoSuchKey:
+        logger.info("CSV-файл первого этапа %s ещё не существует", storage_key)
+    except Exception as exc:
+        error_code = getattr(exc, "response", {}).get("Error", {}).get("Code")
+        if error_code in {"NoSuchKey", "404"}:
+            logger.info("CSV-файл первого этапа %s ещё не существует", storage_key)
+        else:
+            raise
+
+    rows.append(submission)
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=FIRST_STAGE_HEADERS)
+    writer.writeheader()
+    writer.writerows(rows)
+
+    client.put_object(
+        Bucket=S3_BUCKET_NAME,
+        Key=storage_key,
+        Body=output.getvalue().encode("utf-8"),
+        ContentType="text/csv; charset=utf-8",
+    )
+
+
+def build_first_stage_submission_row(
+    user_id: int,
+    username: str | None,
+    full_name: str | None,
+    participants: str,
+    category_code: str | None,
+    category_name: str | None,
+    work_url: str,
+) -> dict:
+    """Собирает строку для сохранения работы первого этапа."""
+    normalized_category_code = (category_code or "").strip()
+    normalized_category_name = (category_name or "").strip()
+    return {
+        "submitted_at_utc": datetime.now(UTC).isoformat(),
+        "telegram_user_id": str(user_id),
+        "telegram_username": username or "",
+        "telegram_full_name": full_name or "",
+        "participants": _normalize_participants(participants),
+        "category_code": normalized_category_code,
+        "category_name": normalized_category_name,
+        "work_url": (work_url or "").strip(),
+    }
+
+
+def get_first_stage_storage_key(category_code: str | None) -> str:
+    """Возвращает ключ CSV-файла для сохранения работы первого этапа."""
+    normalized_category_code = (category_code or "").strip()
+    if normalized_category_code in {"1", "2", "3", "4"}:
+        return f"{S3_FIRST_STAGE_PREFIX}/{normalized_category_code}.csv"
+    return f"{S3_FIRST_STAGE_PREFIX}/other.csv"
+
+
 def _normalize_registration_row(row: dict) -> dict:
     """Приводит старые и новые строки CSV к актуальной схеме."""
     normalized = {header: row.get(header, "") for header in CSV_HEADERS}
     normalized["participants"] = _normalize_participants(normalized["participants"])
     if not normalized["avatar_url"]:
         normalized["avatar_url"] = row.get("avatar_file_id", "")
+    return normalized
+
+
+def _normalize_first_stage_row(row: dict) -> dict:
+    """Приводит строки первого этапа к актуальной схеме."""
+    normalized = {header: row.get(header, "") for header in FIRST_STAGE_HEADERS}
+    normalized["participants"] = _normalize_participants(normalized["participants"])
     return normalized
 
 
