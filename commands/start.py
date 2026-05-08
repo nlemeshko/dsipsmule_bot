@@ -7,8 +7,6 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from commands.common import build_binary_stream
-from commands.admin_notifications import get_admin_ids
-
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /start"""
     chat_type = update.effective_chat.type
@@ -17,14 +15,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Создаем кнопочное меню для личных сообщений
         keyboard_rows = [
             [
+                InlineKeyboardButton("📝 Этап I", callback_data="button_nassal_first_stage")
+            ],
+            [
                 InlineKeyboardButton("🏆 NASSAL2026", callback_data="button_nassal2026")
             ],
-        ]
-        if update.effective_user and update.effective_user.id in get_admin_ids():
-            keyboard_rows.append(
-                [InlineKeyboardButton("📝 Этап I", callback_data="button_nassal_first_stage")]
-            )
-        keyboard_rows.extend([
             [
                 InlineKeyboardButton("🕵 Анонимка", callback_data="button1"),
                 InlineKeyboardButton("🎶 Песня", callback_data="button2")
@@ -36,13 +31,15 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [
                 InlineKeyboardButton("📢 Промо", callback_data="button6")
             ]
-        ])
+        ]
         keyboard = InlineKeyboardMarkup(keyboard_rows)
         
-        message = """🏆 <b>NASSAL2026 уже здесь!</b>
+        message = """📝 <b>Этап I уже открыт!</b>
 
-Первой кнопкой я вынес регистрацию на конкурс, чтобы до неё можно было дотянуться сразу.
-Если хочешь подать заявку, нажми <b>NASSAL2026</b> и я проведу тебя по шагам.
+Первой кнопкой я вынес отправку работы для <b>Этапа I</b>, чтобы до неё можно было дотянуться сразу.
+Теперь этот этап доступен всем.
+
+Если тебе всё ещё нужна регистрация на конкурс, кнопка <b>NASSAL2026</b> осталась ниже.
 
 🗡️ А если нужен другой контракт, вот всё меню:
 
@@ -55,7 +52,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 Если потеряешься — зови через /help. Я рядом."""
 
-        photo = build_binary_stream('images/nassal2026.png')
+        photo = build_binary_stream('images/first_stage_new.png')
         if photo:
             await update.message.reply_photo(photo, caption=message, reply_markup=keyboard, parse_mode='HTML')
         else:

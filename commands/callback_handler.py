@@ -13,8 +13,6 @@ from telegram import Update, CallbackQuery
 from telegram.ext import ContextTypes
 from commands.common import build_binary_stream
 from commands.entertainment import get_random_russian_song
-from commands.admin_notifications import get_admin_ids
-
 # FSM состояния
 ANON_STATE = 'anon_waiting_text'
 SONG_STATE = 'song_waiting_text'
@@ -197,14 +195,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
 
     elif query.data == "button_nassal_first_stage":
         from commands.nassal2026 import start_first_stage_submission
-
-        if user_id not in get_admin_ids():
-            await context.bot.send_message(
-                chat_id,
-                "Кнопка `Этап I` пока доступна только администраторам.",
-                parse_mode="Markdown",
-            )
-            return
 
         try:
             await start_first_stage_submission(update, context)
