@@ -181,18 +181,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             print(f"Ошибка при отправке картинки или текста для кнопки Промо: {e}")
             await context.bot.send_message(chat_id, response_text)
 
-    elif query.data == "button_nassal2026":
-        from commands.nassal2026 import start_nassal_registration
-
-        try:
-            await start_nassal_registration(update, context)
-        except Exception as e:
-            print(f"Ошибка при запуске регистрации NASSAL2026: {e}")
-            await context.bot.send_message(
-                chat_id,
-                "🏆 Добро пожаловать на конкурс NASSAL2026!\n\nНапишите, пожалуйста, одно имя или два имени участников."
-            )
-
     elif query.data == "button_nassal_first_stage":
         from commands.nassal2026 import start_first_stage_submission
 
@@ -234,8 +222,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             else:
                 await context.bot.send_message(
                     chat_id,
-                    "🗑️ Ваша регистрация на NASSAL2026 удалена.\n\n"
-                    "Если захотите зарегистрироваться заново, просто отправьте /nassal2026."
+                    "🗑️ Ваша регистрация на NASSAL2026 удалена."
                 )
         except Exception as e:
             print(f"Ошибка при удалении регистрации NASSAL2026: {e}")

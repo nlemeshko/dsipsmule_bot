@@ -18,9 +18,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton("📝 Этап I", callback_data="button_nassal_first_stage")
             ],
             [
-                InlineKeyboardButton("🏆 NASSAL2026", callback_data="button_nassal2026")
-            ],
-            [
                 InlineKeyboardButton("🕵 Анонимка", callback_data="button1"),
                 InlineKeyboardButton("🎶 Песня", callback_data="button2")
             ],
@@ -38,8 +35,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 Первой кнопкой я вынес отправку работы для <b>Этапа I</b>, чтобы до неё можно было дотянуться сразу.
 Теперь этот этап доступен всем.
-
-Если тебе всё ещё нужна регистрация на конкурс, кнопка <b>NASSAL2026</b> осталась ниже.
 
 🗡️ А если нужен другой контракт, вот всё меню:
 
