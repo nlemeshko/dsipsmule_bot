@@ -65,6 +65,7 @@ from storage.s3_registry import (
 logger = logging.getLogger(__name__)
 
 
+FIRST_STAGE_ADMIN_TEXT_LIMIT = 700
 NASSAL_FIRST_STAGE_DONE_ANSWERS = {"готово", "done", "finish", "стоп"}
 NASSAL_FIRST_STAGE_CONTINUE_TEXT = (
     "Материал добавлен.\n\n"
@@ -154,14 +155,22 @@ def _looks_like_url(value: str) -> bool:
     return normalized.startswith("http://") or normalized.startswith("https://")
 
 
+def _truncate_first_stage_admin_value(value: str, limit: int = FIRST_STAGE_ADMIN_TEXT_LIMIT) -> str:
+    normalized = (value or "").strip()
+    if len(normalized) <= limit:
+        return normalized or "нет"
+    return f"{normalized[:limit].rstrip()}... [обрезано]"
+
+
 def _build_first_stage_admin_message(update: Update, submission_row: dict, registration_found: bool) -> str:
     user_id = update.effective_user.id
     user_info = f"@{update.effective_user.username}" if update.effective_user.username else f"ID{user_id}"
     work_type = submission_row.get("work_type", "").strip()
     work_type_label = work_type or "unknown"
-    work_details = submission_row.get("work_url", "").strip() or "медиафайл в сообщении"
-    work_text = submission_row.get("work_text", "").strip()
-    text_block = work_text if work_text else "нет"
+    work_details = _truncate_first_stage_admin_value(
+        submission_row.get("work_url", "").strip() or "медиафайл в сообщении"
+    )
+    text_block = _truncate_first_stage_admin_value(submission_row.get("work_text", "").strip())
 
     return (
         "📝 <b>Новая работа для Этапа I NASSAL2026</b>\n\n"
