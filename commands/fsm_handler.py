@@ -105,6 +105,11 @@ def _get_first_stage_material_slot(work_type: str) -> str:
     return normalized_type
 
 
+def _has_first_stage_material_type(materials: list[dict], work_type: str) -> bool:
+    material_slot = _get_first_stage_material_slot(work_type)
+    return any(_get_first_stage_material_slot(item.get("type", "")) == material_slot for item in materials)
+
+
 def _append_first_stage_material(
     context: ContextTypes.DEFAULT_TYPE,
     work_type: str,
@@ -112,8 +117,7 @@ def _append_first_stage_material(
     work_file_id: str = "",
 ) -> bool:
     materials = _get_first_stage_materials(context)
-    material_slot = _get_first_stage_material_slot(work_type)
-    if any(_get_first_stage_material_slot(item.get("type", "")) == material_slot for item in materials):
+    if _has_first_stage_material_type(materials, work_type):
         return False
 
     materials.append({
@@ -188,6 +192,14 @@ async def _save_first_stage_submission(update: Update, context: ContextTypes.DEF
     storage_key = get_first_stage_storage_key(category_code if registration_found else None)
     materials = _get_first_stage_materials(context)
     work_text = first_stage_data.get("work_text", "")
+    if registration_found and registration and (registration.get("avatar_url") or "").strip():
+        if not _has_first_stage_material_type(materials, "photo"):
+            materials.append({
+                "type": "photo",
+                "url": registration["avatar_url"].strip(),
+                "file_id": "",
+            })
+
     normalized_materials = []
     for material in materials:
         material_type = (material.get("type") or "").strip()
