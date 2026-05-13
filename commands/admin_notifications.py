@@ -112,6 +112,68 @@ async def send_photo_url_to_admins(
 
     logger.info("Фотография по URL отправлена %s из %s админов", sent_count, len(admin_ids))
 
+
+async def send_voice_to_admins(
+    context: ContextTypes.DEFAULT_TYPE,
+    voice_file_id: str,
+    caption: str,
+    admin_ids: list = None,
+):
+    """Отправка голосового сообщения всем админам."""
+    if not admin_ids:
+        admin_ids = get_admin_ids()
+
+    if not admin_ids:
+        logger.warning("Нет админов для отправки голосового сообщения")
+        return
+
+    sent_count = 0
+    for admin_id in admin_ids:
+        try:
+            await context.bot.send_voice(
+                chat_id=admin_id,
+                voice=voice_file_id,
+                caption=caption,
+                parse_mode=ParseMode.HTML,
+            )
+            sent_count += 1
+            logger.info("Голосовое сообщение отправлено админу %s", admin_id)
+        except Exception as e:
+            logger.exception("Ошибка отправки голосового сообщения админу %s: %s", admin_id, e)
+
+    logger.info("Голосовое сообщение отправлено %s из %s админов", sent_count, len(admin_ids))
+
+
+async def send_audio_to_admins(
+    context: ContextTypes.DEFAULT_TYPE,
+    audio_file_id: str,
+    caption: str,
+    admin_ids: list = None,
+):
+    """Отправка аудиофайла всем админам."""
+    if not admin_ids:
+        admin_ids = get_admin_ids()
+
+    if not admin_ids:
+        logger.warning("Нет админов для отправки аудиофайла")
+        return
+
+    sent_count = 0
+    for admin_id in admin_ids:
+        try:
+            await context.bot.send_audio(
+                chat_id=admin_id,
+                audio=audio_file_id,
+                caption=caption,
+                parse_mode=ParseMode.HTML,
+            )
+            sent_count += 1
+            logger.info("Аудиофайл отправлен админу %s", admin_id)
+        except Exception as e:
+            logger.exception("Ошибка отправки аудиофайла админу %s: %s", admin_id, e)
+
+    logger.info("Аудиофайл отправлен %s из %s админов", sent_count, len(admin_ids))
+
 async def send_moderation_request(context: ContextTypes.DEFAULT_TYPE, request_type: str, user_info: str, content: str):
     """Отправка запроса на модерацию"""
     emoji_map = {

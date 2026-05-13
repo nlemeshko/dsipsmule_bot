@@ -103,13 +103,13 @@ NASSAL_FIRST_STAGE_FOUND_TEXT = """📝 <b>Этап I</b>
 <b>Участник(и):</b> {participants}
 <b>Корзина:</b> {category_name}
 
-Теперь пришли <b>ссылку на работу</b> одним сообщением."""
+Теперь пришли <b>ссылку, фото или аудио</b> одним сообщением."""
 
 NASSAL_FIRST_STAGE_NOT_FOUND_TEXT = """⚠️ <b>Этап I</b>
 
 Мы не нашли твою регистрацию в списке конкурса.
 
-Если что-то сломалось и тебя не удалось найти, всё равно можешь отправить <b>ссылку на работу</b> одним сообщением.
+Если что-то сломалось и тебя не удалось найти, всё равно можешь отправить <b>ссылку, фото или аудио</b> одним сообщением.
 Мы сохраним её отдельно и передадим администраторам."""
 
 NASSAL_FIRST_STAGE_SUCCESS_TEXT = """✅ <b>Спасибо!</b>
@@ -122,7 +122,8 @@ NASSAL_FIRST_STAGE_ALREADY_EXISTS_TEXT = """📝 <b>Этап I</b>
 
 <b>Участник(и):</b> {participants}
 <b>Корзина:</b> {category_name}
-<b>Ссылка на работу:</b> {work_url}
+<b>Материал:</b> {work_label}
+{work_text_block}
 
 Если хочешь отправить новую работу, сначала удали текущую."""
 
@@ -352,10 +353,25 @@ async def start_first_stage_submission(update: Update, context: ContextTypes.DEF
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("Удалить работу", callback_data="nassal_first_stage_delete")]
         ])
+        work_type = (submission.get("work_type") or "").strip()
+        work_url = escape(submission.get("work_url", "Не указана"))
+        work_text = escape(submission.get("work_text", ""))
+        if work_type in {"photo", "voice", "audio"} and work_url != "Не указана":
+            work_label = work_url
+        elif work_type == "photo":
+            work_label = "фото"
+        elif work_type == "voice":
+            work_label = "голосовое"
+        elif work_type == "audio":
+            work_label = "аудио"
+        else:
+            work_label = work_url
+        work_text_block = f"<b>Текст:</b> {work_text}" if work_text else "<b>Текст:</b> нет"
         text = NASSAL_FIRST_STAGE_ALREADY_EXISTS_TEXT.format(
             participants=escape(submission.get("participants", "Не указано")),
             category_name=escape(submission.get("category_name", "Не указана") or "other"),
-            work_url=escape(submission.get("work_url", "Не указана")),
+            work_label=work_label,
+            work_text_block=work_text_block,
         )
         await context.bot.send_message(
             chat_id=chat.id,

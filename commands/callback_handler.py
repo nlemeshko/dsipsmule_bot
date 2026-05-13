@@ -23,6 +23,8 @@ NASSAL_AVATAR_STATE = 'nassal_waiting_avatar'
 NASSAL_CATEGORY_STATE = 'nassal_waiting_category'
 NASSAL_CONFIRM_STATE = 'nassal_waiting_confirm'
 NASSAL_FIRST_STAGE_LINK_STATE = 'nassal_first_stage_waiting_link'
+NASSAL_FIRST_STAGE_TEXT_CONFIRM_STATE = 'nassal_first_stage_waiting_text_confirm'
+NASSAL_FIRST_STAGE_TEXT_STATE = 'nassal_first_stage_waiting_text'
 
 # Словари для отслеживания времени последнего запроса
 last_song_day_time = {}

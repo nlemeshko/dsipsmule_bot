@@ -22,6 +22,7 @@ S3_BUCKET_NAME = "nassal2026"
 S3_REGISTRATIONS_KEY = "registrations/nassal2026_registrations.csv"
 S3_AVATARS_PREFIX = "avatars"
 S3_FIRST_STAGE_PREFIX = "first_stage"
+S3_FIRST_STAGE_FILES_PREFIX = "first_stage_files"
 CSV_HEADERS = [
     "registered_at_utc",
     "telegram_user_id",
@@ -40,7 +41,10 @@ FIRST_STAGE_HEADERS = [
     "participants",
     "category_code",
     "category_name",
+    "work_type",
     "work_url",
+    "work_file_id",
+    "work_text",
 ]
 
 
@@ -226,6 +230,40 @@ def upload_avatar_bytes(
     return _build_public_object_url(object_key)
 
 
+def upload_first_stage_file_bytes(
+    file_bytes: bytes,
+    work_type: str,
+    telegram_file_path: str | None = None,
+    content_type: str | None = None,
+) -> str:
+    """Загружает файл первого этапа в Object Storage и возвращает публичный URL."""
+    client = _get_s3_client()
+
+    extension = _resolve_media_extension(
+        telegram_file_path=telegram_file_path,
+        content_type=content_type,
+        work_type=work_type,
+    )
+    object_key = (
+        f"{S3_FIRST_STAGE_FILES_PREFIX}/"
+        f"{datetime.now(UTC).strftime('%Y/%m/%d')}/"
+        f"{uuid4().hex}{extension}"
+    )
+
+    guessed_content_type = (
+        content_type
+        or mimetypes.guess_type(f"work{extension}")[0]
+        or "application/octet-stream"
+    )
+    client.put_object(
+        Bucket=S3_BUCKET_NAME,
+        Key=object_key,
+        Body=file_bytes,
+        ContentType=guessed_content_type,
+    )
+    return _build_public_object_url(object_key)
+
+
 def append_first_stage_submission_row(storage_key: str, submission: dict):
     """Добавляет строку в CSV-файл работ первого этапа."""
     client = _get_s3_client()
@@ -333,7 +371,10 @@ def build_first_stage_submission_row(
     participants: str,
     category_code: str | None,
     category_name: str | None,
-    work_url: str,
+    work_type: str,
+    work_url: str = "",
+    work_file_id: str = "",
+    work_text: str = "",
 ) -> dict:
     """Собирает строку для сохранения работы первого этапа."""
     normalized_category_code = (category_code or "").strip()
@@ -346,7 +387,10 @@ def build_first_stage_submission_row(
         "participants": _normalize_participants(participants),
         "category_code": normalized_category_code,
         "category_name": normalized_category_name,
+        "work_type": (work_type or "").strip(),
         "work_url": (work_url or "").strip(),
+        "work_file_id": (work_file_id or "").strip(),
+        "work_text": (work_text or "").strip(),
     }
 
 
@@ -382,6 +426,8 @@ def _normalize_first_stage_row(row: dict) -> dict:
     """Приводит строки первого этапа к актуальной схеме."""
     normalized = {header: row.get(header, "") for header in FIRST_STAGE_HEADERS}
     normalized["participants"] = _normalize_participants(normalized["participants"])
+    if not normalized["work_type"]:
+        normalized["work_type"] = "link" if normalized["work_url"] else "unknown"
     return normalized
 
 
@@ -405,6 +451,31 @@ def _resolve_avatar_extension(
         return guessed_suffix
 
     return ".jpg"
+
+
+def _resolve_media_extension(
+    telegram_file_path: str | None,
+    content_type: str | None,
+    work_type: str | None,
+) -> str:
+    """Определяет расширение медиафайла первого этапа."""
+    if telegram_file_path:
+        suffix = Path(telegram_file_path).suffix.lower()
+        if suffix:
+            return suffix
+
+    guessed_suffix = mimetypes.guess_extension(content_type or "")
+    if guessed_suffix:
+        return guessed_suffix
+
+    if work_type == "photo":
+        return ".jpg"
+    if work_type == "voice":
+        return ".ogg"
+    if work_type == "audio":
+        return ".mp3"
+
+    return ".bin"
 
 
 def _build_public_object_url(object_key: str) -> str:

@@ -21,7 +21,7 @@ from commands.pole import pole_command, handle_pole_message
 from commands.roast_proof import roast_command, proof_command
 from commands.ask import ask_command
 from commands.callback_handler import handle_callback_query
-from commands.fsm_handler import handle_fsm_message, handle_anon_photo, handle_anon_voice
+from commands.fsm_handler import handle_fsm_message, handle_anon_photo, handle_anon_voice, handle_fsm_audio
 
 # Загружаем переменные окружения
 load_dotenv()
@@ -85,6 +85,10 @@ class TelegramBot:
         # Обработчик анонимных голосовых сообщений
         self.application.add_handler(
             MessageHandler(filters.ChatType.PRIVATE & filters.VOICE, handle_anon_voice)
+        )
+
+        self.application.add_handler(
+            MessageHandler(filters.ChatType.PRIVATE & filters.AUDIO, handle_fsm_audio)
         )
         
         # Обработчик личных сообщений (только для private чатов, если не в FSM)

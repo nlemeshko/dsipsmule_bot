@@ -22,6 +22,8 @@ from commands.callback_handler import (
     NASSAL_CATEGORY_STATE,
     NASSAL_CONFIRM_STATE,
     NASSAL_FIRST_STAGE_LINK_STATE,
+    NASSAL_FIRST_STAGE_TEXT_CONFIRM_STATE,
+    NASSAL_FIRST_STAGE_TEXT_STATE,
 )
 
 # Импорт функций отправки админам
@@ -31,6 +33,8 @@ from commands.admin_notifications import (
     send_anon_with_voice,
     send_photo_to_admins,
     send_photo_url_to_admins,
+    send_voice_to_admins,
+    send_audio_to_admins,
     send_to_admins,
 )
 from commands.nassal2026 import (
@@ -54,10 +58,137 @@ from storage.s3_registry import (
     registration_exists,
     _normalize_participants,
     upload_avatar_bytes,
+    upload_first_stage_file_bytes,
 )
 
 
 logger = logging.getLogger(__name__)
+
+
+NASSAL_FIRST_STAGE_TEXT_QUESTION = (
+    "Материал получил.\n\n"
+    "Есть ли <b>текст</b> к этой работе?\n"
+    "Ответьте, пожалуйста, <b>да</b> или <b>нет</b>."
+)
+
+
+def _build_first_stage_admin_message(update: Update, submission_row: dict, registration_found: bool) -> str:
+    user_id = update.effective_user.id
+    user_info = f"@{update.effective_user.username}" if update.effective_user.username else f"ID{user_id}"
+    work_type = submission_row.get("work_type", "")
+    work_type_label = {
+        "link": "ссылка",
+        "photo": "фото",
+        "voice": "голосовое",
+        "audio": "аудио",
+    }.get(work_type, "неизвестно")
+    work_details = submission_row.get("work_url", "").strip() or "медиафайл в сообщении"
+    work_text = submission_row.get("work_text", "").strip()
+    text_block = work_text if work_text else "нет"
+
+    return (
+        "📝 <b>Новая работа для Этапа I NASSAL2026</b>\n\n"
+        f"<b>Telegram:</b> {user_info}\n"
+        f"<b>Имя в Telegram:</b> {update.effective_user.full_name or 'Без имени'}\n"
+        f"<b>Участник(и):</b> {submission_row['participants']}\n"
+        f"<b>Корзина:</b> {submission_row['category_name'] or 'other'}\n"
+        f"<b>Найден в реестре:</b> {'да' if registration_found else 'нет'}\n"
+        f"<b>Тип материала:</b> {work_type_label}\n"
+        f"<b>Материал:</b> {work_details}\n"
+        f"<b>Текст:</b> {text_block}"
+    )
+
+
+async def _save_first_stage_submission(update: Update, context: ContextTypes.DEFAULT_TYPE, msg):
+    user_id = update.effective_user.id
+    first_stage_data = context.user_data.get("nassal_first_stage", {})
+    registration = first_stage_data.get("registration")
+    registration_found = bool(first_stage_data.get("registration_found"))
+
+    participants = (
+        registration.get("participants")
+        if registration_found and registration
+        else (update.effective_user.full_name or "Неизвестный участник")
+    )
+    category_code = registration.get("category_code") if registration else ""
+    category_name = registration.get("category_name") if registration else "other"
+    storage_key = get_first_stage_storage_key(category_code if registration_found else None)
+    work_type = first_stage_data.get("work_type", "")
+    work_url = first_stage_data.get("work_url", "")
+    work_file_id = first_stage_data.get("work_file_id", "")
+    work_text = first_stage_data.get("work_text", "")
+
+    if work_type in {"photo", "voice", "audio"} and work_file_id and not work_url:
+        try:
+            telegram_file = await context.bot.get_file(work_file_id)
+            file_bytes = bytes(await telegram_file.download_as_bytearray())
+            work_url = await asyncio.to_thread(
+                upload_first_stage_file_bytes,
+                file_bytes,
+                work_type,
+                telegram_file.file_path,
+                getattr(telegram_file, "mime_type", None),
+            )
+            first_stage_data["work_url"] = work_url
+        except Exception as exc:
+            logger.exception("Не удалось загрузить файл Этапа I в Object Storage: %s", exc)
+
+    submission_row = build_first_stage_submission_row(
+        user_id=user_id,
+        username=update.effective_user.username,
+        full_name=update.effective_user.full_name,
+        participants=participants,
+        category_code=category_code if registration_found else "",
+        category_name=category_name if registration_found else "other",
+        work_type=work_type,
+        work_url=work_url,
+        work_file_id=work_file_id,
+        work_text=work_text,
+    )
+
+    admin_message = _build_first_stage_admin_message(update, submission_row, registration_found)
+    work_type = submission_row.get("work_type", "")
+    work_file_id = submission_row.get("work_file_id", "")
+
+    try:
+        if work_type == "photo" and work_file_id:
+            await send_photo_to_admins(context, work_file_id, admin_message)
+        elif work_type == "voice" and work_file_id:
+            await send_voice_to_admins(context, work_file_id, admin_message)
+        elif work_type == "audio" and work_file_id:
+            await send_audio_to_admins(context, work_file_id, admin_message)
+        elif registration_found and registration and (registration.get("avatar_url") or "").strip():
+            await send_photo_url_to_admins(
+                context,
+                registration["avatar_url"].strip(),
+                admin_message,
+            )
+        else:
+            await send_to_admins(context, admin_message)
+
+        await asyncio.to_thread(
+            append_first_stage_submission_row,
+            storage_key,
+            submission_row,
+        )
+    except Exception as exc:
+        logger.exception("Не удалось сохранить работу Этапа I: %s", exc)
+        await msg.reply_text(
+            "Не удалось сохранить работу для Этапа I.\n\nПожалуйста, попробуйте отправить материал ещё раз чуть позже."
+        )
+        return
+
+    await msg.reply_text(NASSAL_FIRST_STAGE_SUCCESS_TEXT, parse_mode='HTML')
+    context.user_data.pop("nassal_first_stage", None)
+    user_states.pop(user_id, None)
+
+
+def _set_first_stage_work_data(context: ContextTypes.DEFAULT_TYPE, work_type: str, work_url: str = "", work_file_id: str = ""):
+    first_stage_data = context.user_data.setdefault("nassal_first_stage", {})
+    first_stage_data["work_type"] = work_type
+    first_stage_data["work_url"] = (work_url or "").strip()
+    first_stage_data["work_file_id"] = (work_file_id or "").strip()
+    first_stage_data.pop("work_text", None)
 
 async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик FSM состояний"""
@@ -204,68 +335,35 @@ async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
     elif user_states.get(user_id) == NASSAL_FIRST_STAGE_LINK_STATE:
         work_url = msg.text.strip() if (msg and msg.text) else ""
         if not work_url:
-            await msg.reply_text("Пришлите, пожалуйста, ссылку на работу одним сообщением.")
+            await msg.reply_text("Пришлите, пожалуйста, ссылку, фото или аудио одним сообщением.")
+            return
+        _set_first_stage_work_data(context, "link", work_url=work_url)
+        user_states[user_id] = NASSAL_FIRST_STAGE_TEXT_CONFIRM_STATE
+        await msg.reply_text(NASSAL_FIRST_STAGE_TEXT_QUESTION, parse_mode='HTML')
+        return
+
+    elif user_states.get(user_id) == NASSAL_FIRST_STAGE_TEXT_CONFIRM_STATE:
+        answer = msg.text.strip().lower() if (msg and msg.text) else ""
+        if answer in YES_ANSWERS:
+            user_states[user_id] = NASSAL_FIRST_STAGE_TEXT_STATE
+            await msg.reply_text("Пришлите текст к работе одним сообщением.", parse_mode='HTML')
+            return
+        if answer in NO_ANSWERS:
+            await _save_first_stage_submission(update, context, msg)
             return
 
-        first_stage_data = context.user_data.get("nassal_first_stage", {})
-        registration = first_stage_data.get("registration")
-        registration_found = bool(first_stage_data.get("registration_found"))
+        await msg.reply_text("Ответьте, пожалуйста, <b>да</b> или <b>нет</b>.", parse_mode='HTML')
+        return
 
-        participants = (
-            registration.get("participants")
-            if registration_found and registration
-            else (update.effective_user.full_name or "Неизвестный участник")
-        )
-        category_code = registration.get("category_code") if registration else ""
-        category_name = registration.get("category_name") if registration else "other"
-        storage_key = get_first_stage_storage_key(category_code if registration_found else None)
-
-        submission_row = build_first_stage_submission_row(
-            user_id=user_id,
-            username=update.effective_user.username,
-            full_name=update.effective_user.full_name,
-            participants=participants,
-            category_code=category_code if registration_found else "",
-            category_name=category_name if registration_found else "other",
-            work_url=work_url,
-        )
-
-        user_info = f"@{update.effective_user.username}" if update.effective_user.username else f"ID{user_id}"
-        admin_message = (
-            "📝 <b>Новая работа для Этапа I NASSAL2026</b>\n\n"
-            f"<b>Telegram:</b> {user_info}\n"
-            f"<b>Имя в Telegram:</b> {update.effective_user.full_name or 'Без имени'}\n"
-            f"<b>Участник(и):</b> {submission_row['participants']}\n"
-            f"<b>Корзина:</b> {submission_row['category_name'] or 'other'}\n"
-            f"<b>Найден в реестре:</b> {'да' if registration_found else 'нет'}\n"
-            f"<b>Ссылка на работу:</b> {submission_row['work_url']}"
-        )
-
-        try:
-            if registration_found and registration and (registration.get("avatar_url") or "").strip():
-                await send_photo_url_to_admins(
-                    context,
-                    registration["avatar_url"].strip(),
-                    admin_message,
-                )
-            else:
-                await send_to_admins(context, admin_message)
-
-            await asyncio.to_thread(
-                append_first_stage_submission_row,
-                storage_key,
-                submission_row,
-            )
-        except Exception as exc:
-            logger.exception("Не удалось сохранить работу Этапа I: %s", exc)
-            await msg.reply_text(
-                "Не удалось сохранить работу для Этапа I.\n\nПожалуйста, попробуйте отправить ссылку ещё раз чуть позже."
-            )
+    elif user_states.get(user_id) == NASSAL_FIRST_STAGE_TEXT_STATE:
+        work_text = msg.text.strip() if (msg and msg.text) else ""
+        if not work_text:
+            await msg.reply_text("Пришлите, пожалуйста, текст одним сообщением.")
             return
 
-        await msg.reply_text(NASSAL_FIRST_STAGE_SUCCESS_TEXT, parse_mode='HTML')
-        context.user_data.pop("nassal_first_stage", None)
-        user_states.pop(user_id, None)
+        first_stage_data = context.user_data.setdefault("nassal_first_stage", {})
+        first_stage_data["work_text"] = work_text
+        await _save_first_stage_submission(update, context, msg)
         return
 
     # FSM: если пользователь предлагает песню
@@ -345,6 +443,17 @@ async def handle_anon_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_category_guide(context, msg.chat_id, registrations=registrations)
         return
 
+    if user_states.get(user_id) == NASSAL_FIRST_STAGE_LINK_STATE:
+        photo_id = (msg.photo[-1].file_id if (msg and msg.photo) else None)
+        if not photo_id:
+            await msg.reply_text("Не удалось получить фото. Попробуйте отправить работу ещё раз.")
+            return
+
+        _set_first_stage_work_data(context, "photo", work_file_id=photo_id)
+        user_states[user_id] = NASSAL_FIRST_STAGE_TEXT_CONFIRM_STATE
+        await msg.reply_text(NASSAL_FIRST_STAGE_TEXT_QUESTION, parse_mode='HTML')
+        return
+
     if user_states.get(user_id) == ANON_STATE:
         print(f"Получена фотография от {user_id} в ANON_STATE.")
         # Обработка фотографий
@@ -392,4 +501,37 @@ async def handle_anon_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if msg:
                 await msg.reply_text("Произошла ошибка при отправке голосового сообщения. Попробуйте еще раз.")
         user_states.pop(user_id, None)
+
+    elif user_states.get(user_id) == NASSAL_FIRST_STAGE_LINK_STATE:
+        voice_id = msg.voice.file_id if (msg and msg.voice) else None
+        if not voice_id:
+            await msg.reply_text("Не удалось получить аудио. Попробуйте отправить работу ещё раз.")
+            return
+
+        _set_first_stage_work_data(context, "voice", work_file_id=voice_id)
+        user_states[user_id] = NASSAL_FIRST_STAGE_TEXT_CONFIRM_STATE
+        await msg.reply_text(NASSAL_FIRST_STAGE_TEXT_QUESTION, parse_mode='HTML')
         return
+
+
+async def handle_fsm_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик аудио для FSM состояний."""
+    user_id = update.effective_user.id
+    chat_type = update.effective_chat.type
+    msg = update.effective_message
+
+    if chat_type != "private":
+        return
+
+    if user_states.get(user_id) != NASSAL_FIRST_STAGE_LINK_STATE:
+        return
+
+    audio_id = msg.audio.file_id if (msg and msg.audio) else None
+    if not audio_id:
+        await msg.reply_text("Не удалось получить аудиофайл. Попробуйте отправить работу ещё раз.")
+        return
+
+    _set_first_stage_work_data(context, "audio", work_file_id=audio_id)
+    user_states[user_id] = NASSAL_FIRST_STAGE_TEXT_CONFIRM_STATE
+    await msg.reply_text(NASSAL_FIRST_STAGE_TEXT_QUESTION, parse_mode='HTML')
+    return
