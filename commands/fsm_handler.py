@@ -65,23 +65,84 @@ from storage.s3_registry import (
 logger = logging.getLogger(__name__)
 
 
+NASSAL_FIRST_STAGE_DONE_ANSWERS = {"готово", "done", "finish", "стоп"}
+NASSAL_FIRST_STAGE_CONTINUE_TEXT = (
+    "Материал добавлен.\n\n"
+    "Можешь прислать ещё <b>ссылку, фото или аудио</b>.\n"
+    "Когда всё отправишь, напиши <b>готово</b>."
+)
 NASSAL_FIRST_STAGE_TEXT_QUESTION = (
-    "Материал получил.\n\n"
+    "Все материалы получил.\n\n"
     "Есть ли <b>текст</b> к этой работе?\n"
     "Ответьте, пожалуйста, <b>да</b> или <b>нет</b>."
 )
 
 
+def _get_first_stage_materials(context: ContextTypes.DEFAULT_TYPE) -> list[dict]:
+    first_stage_data = context.user_data.setdefault("nassal_first_stage", {})
+    materials = first_stage_data.get("materials")
+    if isinstance(materials, list):
+        return materials
+
+    legacy_work_type = (first_stage_data.get("work_type") or "").strip()
+    legacy_work_url = (first_stage_data.get("work_url") or "").strip()
+    legacy_work_file_id = (first_stage_data.get("work_file_id") or "").strip()
+    materials = []
+    if legacy_work_type or legacy_work_url or legacy_work_file_id:
+        materials.append({
+            "type": legacy_work_type or ("link" if legacy_work_url else "unknown"),
+            "url": legacy_work_url,
+            "file_id": legacy_work_file_id,
+        })
+    first_stage_data["materials"] = materials
+    return materials
+
+
+def _append_first_stage_material(
+    context: ContextTypes.DEFAULT_TYPE,
+    work_type: str,
+    work_url: str = "",
+    work_file_id: str = "",
+):
+    materials = _get_first_stage_materials(context)
+    materials.append({
+        "type": (work_type or "").strip(),
+        "url": (work_url or "").strip(),
+        "file_id": (work_file_id or "").strip(),
+    })
+    first_stage_data = context.user_data.setdefault("nassal_first_stage", {})
+    first_stage_data["materials"] = materials
+    first_stage_data["work_type"] = "|".join(item["type"] for item in materials if item.get("type"))
+    first_stage_data["work_url"] = "\n".join(item["url"] for item in materials if item.get("url"))
+    first_stage_data["work_file_id"] = "\n".join(item["file_id"] for item in materials if item.get("file_id"))
+    first_stage_data.pop("work_text", None)
+
+
+def _format_materials_for_message(materials: list[dict]) -> str:
+    lines = []
+    for index, material in enumerate(materials, start=1):
+        material_type = material.get("type", "")
+        label = {
+            "link": "ссылка",
+            "photo": "фото",
+            "voice": "голосовое",
+            "audio": "аудио",
+        }.get(material_type, material_type or "материал")
+        value = material.get("url", "").strip() or "медиафайл"
+        lines.append(f"{index}. {label}: {value}")
+    return "\n".join(lines) if lines else "нет"
+
+
+def _looks_like_url(value: str) -> bool:
+    normalized = (value or "").strip().lower()
+    return normalized.startswith("http://") or normalized.startswith("https://")
+
+
 def _build_first_stage_admin_message(update: Update, submission_row: dict, registration_found: bool) -> str:
     user_id = update.effective_user.id
     user_info = f"@{update.effective_user.username}" if update.effective_user.username else f"ID{user_id}"
-    work_type = submission_row.get("work_type", "")
-    work_type_label = {
-        "link": "ссылка",
-        "photo": "фото",
-        "voice": "голосовое",
-        "audio": "аудио",
-    }.get(work_type, "неизвестно")
+    work_type = submission_row.get("work_type", "").strip()
+    work_type_label = work_type or "unknown"
     work_details = submission_row.get("work_url", "").strip() or "медиафайл в сообщении"
     work_text = submission_row.get("work_text", "").strip()
     text_block = work_text if work_text else "нет"
@@ -93,8 +154,8 @@ def _build_first_stage_admin_message(update: Update, submission_row: dict, regis
         f"<b>Участник(и):</b> {submission_row['participants']}\n"
         f"<b>Корзина:</b> {submission_row['category_name'] or 'other'}\n"
         f"<b>Найден в реестре:</b> {'да' if registration_found else 'нет'}\n"
-        f"<b>Тип материала:</b> {work_type_label}\n"
-        f"<b>Материал:</b> {work_details}\n"
+        f"<b>Типы материалов:</b> {work_type_label}\n"
+        f"<b>Материалы:</b>\n{work_details}\n"
         f"<b>Текст:</b> {text_block}"
     )
 
@@ -113,25 +174,44 @@ async def _save_first_stage_submission(update: Update, context: ContextTypes.DEF
     category_code = registration.get("category_code") if registration else ""
     category_name = registration.get("category_name") if registration else "other"
     storage_key = get_first_stage_storage_key(category_code if registration_found else None)
-    work_type = first_stage_data.get("work_type", "")
-    work_url = first_stage_data.get("work_url", "")
-    work_file_id = first_stage_data.get("work_file_id", "")
+    materials = _get_first_stage_materials(context)
     work_text = first_stage_data.get("work_text", "")
+    normalized_materials = []
+    for material in materials:
+        material_type = (material.get("type") or "").strip()
+        material_url = (material.get("url") or "").strip()
+        material_file_id = (material.get("file_id") or "").strip()
 
-    if work_type in {"photo", "voice", "audio"} and work_file_id and not work_url:
-        try:
-            telegram_file = await context.bot.get_file(work_file_id)
-            file_bytes = bytes(await telegram_file.download_as_bytearray())
-            work_url = await asyncio.to_thread(
-                upload_first_stage_file_bytes,
-                file_bytes,
-                work_type,
-                telegram_file.file_path,
-                getattr(telegram_file, "mime_type", None),
-            )
-            first_stage_data["work_url"] = work_url
-        except Exception as exc:
-            logger.exception("Не удалось загрузить файл Этапа I в Object Storage: %s", exc)
+        if material_type in {"photo", "voice", "audio"} and material_file_id and not material_url:
+            try:
+                telegram_file = await context.bot.get_file(material_file_id)
+                file_bytes = bytes(await telegram_file.download_as_bytearray())
+                material_url = await asyncio.to_thread(
+                    upload_first_stage_file_bytes,
+                    file_bytes,
+                    material_type,
+                    telegram_file.file_path,
+                    getattr(telegram_file, "mime_type", None),
+                )
+            except Exception as exc:
+                logger.exception("Не удалось загрузить файл Этапа I в Object Storage: %s", exc)
+        normalized_materials.append({
+            "type": material_type,
+            "url": material_url,
+            "file_id": material_file_id,
+        })
+
+    if not normalized_materials:
+        await msg.reply_text("Сначала пришлите хотя бы один материал, а потом напишите <b>готово</b>.", parse_mode='HTML')
+        return
+
+    first_stage_data["materials"] = normalized_materials
+    work_type = "|".join(item["type"] for item in normalized_materials if item.get("type"))
+    work_url = _format_materials_for_message(normalized_materials)
+    work_file_id = "\n".join(item["file_id"] for item in normalized_materials if item.get("file_id"))
+    first_stage_data["work_type"] = work_type
+    first_stage_data["work_url"] = work_url
+    first_stage_data["work_file_id"] = work_file_id
 
     submission_row = build_first_stage_submission_row(
         user_id=user_id,
@@ -147,17 +227,9 @@ async def _save_first_stage_submission(update: Update, context: ContextTypes.DEF
     )
 
     admin_message = _build_first_stage_admin_message(update, submission_row, registration_found)
-    work_type = submission_row.get("work_type", "")
-    work_file_id = submission_row.get("work_file_id", "")
 
     try:
-        if work_type == "photo" and work_file_id:
-            await send_photo_to_admins(context, work_file_id, admin_message)
-        elif work_type == "voice" and work_file_id:
-            await send_voice_to_admins(context, work_file_id, admin_message)
-        elif work_type == "audio" and work_file_id:
-            await send_audio_to_admins(context, work_file_id, admin_message)
-        elif registration_found and registration and (registration.get("avatar_url") or "").strip():
+        if registration_found and registration and (registration.get("avatar_url") or "").strip():
             await send_photo_url_to_admins(
                 context,
                 registration["avatar_url"].strip(),
@@ -165,6 +237,17 @@ async def _save_first_stage_submission(update: Update, context: ContextTypes.DEF
             )
         else:
             await send_to_admins(context, admin_message)
+
+        for material in normalized_materials:
+            material_type = material.get("type", "")
+            material_url = material.get("url", "")
+            material_file_id = material.get("file_id", "")
+            if material_type == "photo" and material_file_id:
+                await send_photo_to_admins(context, material_file_id, material_url or "Фото для Этапа I")
+            elif material_type == "voice" and material_file_id:
+                await send_voice_to_admins(context, material_file_id, material_url or "Голосовое для Этапа I")
+            elif material_type == "audio" and material_file_id:
+                await send_audio_to_admins(context, material_file_id, material_url or "Аудио для Этапа I")
 
         await asyncio.to_thread(
             append_first_stage_submission_row,
@@ -181,14 +264,6 @@ async def _save_first_stage_submission(update: Update, context: ContextTypes.DEF
     await msg.reply_text(NASSAL_FIRST_STAGE_SUCCESS_TEXT, parse_mode='HTML')
     context.user_data.pop("nassal_first_stage", None)
     user_states.pop(user_id, None)
-
-
-def _set_first_stage_work_data(context: ContextTypes.DEFAULT_TYPE, work_type: str, work_url: str = "", work_file_id: str = ""):
-    first_stage_data = context.user_data.setdefault("nassal_first_stage", {})
-    first_stage_data["work_type"] = work_type
-    first_stage_data["work_url"] = (work_url or "").strip()
-    first_stage_data["work_file_id"] = (work_file_id or "").strip()
-    first_stage_data.pop("work_text", None)
 
 async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик FSM состояний"""
@@ -334,12 +409,24 @@ async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     elif user_states.get(user_id) == NASSAL_FIRST_STAGE_LINK_STATE:
         work_url = msg.text.strip() if (msg and msg.text) else ""
+        materials = _get_first_stage_materials(context)
         if not work_url:
-            await msg.reply_text("Пришлите, пожалуйста, ссылку, фото или аудио одним сообщением.")
+            await msg.reply_text("Пришлите, пожалуйста, ссылку, фото или аудио. Когда закончите, напишите <b>готово</b>.", parse_mode='HTML')
             return
-        _set_first_stage_work_data(context, "link", work_url=work_url)
-        user_states[user_id] = NASSAL_FIRST_STAGE_TEXT_CONFIRM_STATE
-        await msg.reply_text(NASSAL_FIRST_STAGE_TEXT_QUESTION, parse_mode='HTML')
+        if work_url.lower() in NASSAL_FIRST_STAGE_DONE_ANSWERS:
+            if not materials:
+                await msg.reply_text("Пока нет ни одного материала. Сначала пришлите ссылку, фото или аудио.", parse_mode='HTML')
+                return
+            user_states[user_id] = NASSAL_FIRST_STAGE_TEXT_CONFIRM_STATE
+            await msg.reply_text(NASSAL_FIRST_STAGE_TEXT_QUESTION, parse_mode='HTML')
+            return
+
+        _append_first_stage_material(context, "link", work_url=work_url)
+        if not materials and _looks_like_url(work_url):
+            user_states[user_id] = NASSAL_FIRST_STAGE_TEXT_CONFIRM_STATE
+            await msg.reply_text(NASSAL_FIRST_STAGE_TEXT_QUESTION, parse_mode='HTML')
+            return
+        await msg.reply_text(NASSAL_FIRST_STAGE_CONTINUE_TEXT, parse_mode='HTML')
         return
 
     elif user_states.get(user_id) == NASSAL_FIRST_STAGE_TEXT_CONFIRM_STATE:
@@ -449,9 +536,11 @@ async def handle_anon_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await msg.reply_text("Не удалось получить фото. Попробуйте отправить работу ещё раз.")
             return
 
-        _set_first_stage_work_data(context, "photo", work_file_id=photo_id)
-        user_states[user_id] = NASSAL_FIRST_STAGE_TEXT_CONFIRM_STATE
-        await msg.reply_text(NASSAL_FIRST_STAGE_TEXT_QUESTION, parse_mode='HTML')
+        _append_first_stage_material(context, "photo", work_file_id=photo_id)
+        caption = (msg.caption or "").strip() if msg else ""
+        if caption:
+            _append_first_stage_material(context, "link", work_url=caption)
+        await msg.reply_text(NASSAL_FIRST_STAGE_CONTINUE_TEXT, parse_mode='HTML')
         return
 
     if user_states.get(user_id) == ANON_STATE:
@@ -508,9 +597,11 @@ async def handle_anon_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await msg.reply_text("Не удалось получить аудио. Попробуйте отправить работу ещё раз.")
             return
 
-        _set_first_stage_work_data(context, "voice", work_file_id=voice_id)
-        user_states[user_id] = NASSAL_FIRST_STAGE_TEXT_CONFIRM_STATE
-        await msg.reply_text(NASSAL_FIRST_STAGE_TEXT_QUESTION, parse_mode='HTML')
+        _append_first_stage_material(context, "voice", work_file_id=voice_id)
+        caption = (msg.caption or "").strip() if msg else ""
+        if caption:
+            _append_first_stage_material(context, "link", work_url=caption)
+        await msg.reply_text(NASSAL_FIRST_STAGE_CONTINUE_TEXT, parse_mode='HTML')
         return
 
 
@@ -531,7 +622,9 @@ async def handle_fsm_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text("Не удалось получить аудиофайл. Попробуйте отправить работу ещё раз.")
         return
 
-    _set_first_stage_work_data(context, "audio", work_file_id=audio_id)
-    user_states[user_id] = NASSAL_FIRST_STAGE_TEXT_CONFIRM_STATE
-    await msg.reply_text(NASSAL_FIRST_STAGE_TEXT_QUESTION, parse_mode='HTML')
+    _append_first_stage_material(context, "audio", work_file_id=audio_id)
+    caption = (msg.caption or "").strip() if msg else ""
+    if caption:
+        _append_first_stage_material(context, "link", work_url=caption)
+    await msg.reply_text(NASSAL_FIRST_STAGE_CONTINUE_TEXT, parse_mode='HTML')
     return
