@@ -98,13 +98,24 @@ def _get_first_stage_materials(context: ContextTypes.DEFAULT_TYPE) -> list[dict]
     return materials
 
 
+def _get_first_stage_material_slot(work_type: str) -> str:
+    normalized_type = (work_type or "").strip()
+    if normalized_type in {"voice", "audio"}:
+        return "audio"
+    return normalized_type
+
+
 def _append_first_stage_material(
     context: ContextTypes.DEFAULT_TYPE,
     work_type: str,
     work_url: str = "",
     work_file_id: str = "",
-):
+) -> bool:
     materials = _get_first_stage_materials(context)
+    material_slot = _get_first_stage_material_slot(work_type)
+    if any(_get_first_stage_material_slot(item.get("type", "")) == material_slot for item in materials):
+        return False
+
     materials.append({
         "type": (work_type or "").strip(),
         "url": (work_url or "").strip(),
@@ -116,6 +127,7 @@ def _append_first_stage_material(
     first_stage_data["work_url"] = "\n".join(item["url"] for item in materials if item.get("url"))
     first_stage_data["work_file_id"] = "\n".join(item["file_id"] for item in materials if item.get("file_id"))
     first_stage_data.pop("work_text", None)
+    return True
 
 
 def _format_materials_for_message(materials: list[dict]) -> str:
@@ -421,7 +433,13 @@ async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await msg.reply_text(NASSAL_FIRST_STAGE_TEXT_QUESTION, parse_mode='HTML')
             return
 
-        _append_first_stage_material(context, "link", work_url=work_url)
+        if not _append_first_stage_material(context, "link", work_url=work_url):
+            await msg.reply_text(
+                "Ссылка уже добавлена. Для Этапа I можно отправить только <b>одну ссылку</b>, одно <b>фото</b> и одно <b>аудио</b>.\n\n"
+                "Если всё готово, напиши <b>готово</b>.",
+                parse_mode='HTML',
+            )
+            return
         if not materials and _looks_like_url(work_url):
             user_states[user_id] = NASSAL_FIRST_STAGE_TEXT_CONFIRM_STATE
             await msg.reply_text(NASSAL_FIRST_STAGE_TEXT_QUESTION, parse_mode='HTML')
@@ -536,10 +554,22 @@ async def handle_anon_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await msg.reply_text("Не удалось получить фото. Попробуйте отправить работу ещё раз.")
             return
 
-        _append_first_stage_material(context, "photo", work_file_id=photo_id)
+        if not _append_first_stage_material(context, "photo", work_file_id=photo_id):
+            await msg.reply_text(
+                "Фото уже добавлено. Для Этапа I можно отправить только <b>одно фото</b>.\n\n"
+                "Если всё готово, напиши <b>готово</b>.",
+                parse_mode='HTML',
+            )
+            return
         caption = (msg.caption or "").strip() if msg else ""
         if caption:
-            _append_first_stage_material(context, "link", work_url=caption)
+            if not _append_first_stage_material(context, "link", work_url=caption):
+                await msg.reply_text(
+                    "Фото добавлено, но ссылка из подписи уже не сохранена: ссылка уже есть.\n\n"
+                    "Можно оставить так или написать <b>готово</b>.",
+                    parse_mode='HTML',
+                )
+                return
         await msg.reply_text(NASSAL_FIRST_STAGE_CONTINUE_TEXT, parse_mode='HTML')
         return
 
@@ -597,10 +627,22 @@ async def handle_anon_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await msg.reply_text("Не удалось получить аудио. Попробуйте отправить работу ещё раз.")
             return
 
-        _append_first_stage_material(context, "voice", work_file_id=voice_id)
+        if not _append_first_stage_material(context, "voice", work_file_id=voice_id):
+            await msg.reply_text(
+                "Аудио уже добавлено. Для Этапа I можно отправить только <b>одно аудио</b> или <b>одно голосовое</b>.\n\n"
+                "Если всё готово, напиши <b>готово</b>.",
+                parse_mode='HTML',
+            )
+            return
         caption = (msg.caption or "").strip() if msg else ""
         if caption:
-            _append_first_stage_material(context, "link", work_url=caption)
+            if not _append_first_stage_material(context, "link", work_url=caption):
+                await msg.reply_text(
+                    "Аудио добавлено, но ссылка из подписи уже не сохранена: ссылка уже есть.\n\n"
+                    "Можно оставить так или написать <b>готово</b>.",
+                    parse_mode='HTML',
+                )
+                return
         await msg.reply_text(NASSAL_FIRST_STAGE_CONTINUE_TEXT, parse_mode='HTML')
         return
 
@@ -622,9 +664,21 @@ async def handle_fsm_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text("Не удалось получить аудиофайл. Попробуйте отправить работу ещё раз.")
         return
 
-    _append_first_stage_material(context, "audio", work_file_id=audio_id)
+    if not _append_first_stage_material(context, "audio", work_file_id=audio_id):
+        await msg.reply_text(
+            "Аудио уже добавлено. Для Этапа I можно отправить только <b>одно аудио</b> или <b>одно голосовое</b>.\n\n"
+            "Если всё готово, напиши <b>готово</b>.",
+            parse_mode='HTML',
+        )
+        return
     caption = (msg.caption or "").strip() if msg else ""
     if caption:
-        _append_first_stage_material(context, "link", work_url=caption)
+        if not _append_first_stage_material(context, "link", work_url=caption):
+            await msg.reply_text(
+                "Аудио добавлено, но ссылка из подписи уже не сохранена: ссылка уже есть.\n\n"
+                "Можно оставить так или написать <b>готово</b>.",
+                parse_mode='HTML',
+            )
+            return
     await msg.reply_text(NASSAL_FIRST_STAGE_CONTINUE_TEXT, parse_mode='HTML')
     return
