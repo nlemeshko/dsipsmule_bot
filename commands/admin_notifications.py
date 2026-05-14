@@ -7,11 +7,13 @@
 import logging
 import os
 from functools import lru_cache
+from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
 
 logger = logging.getLogger(__name__)
+TELEGRAM_MEDIA_CAPTION_LIMIT = 1024
 
 # Получаем список админов из переменных окружения
 @lru_cache(maxsize=1)
@@ -68,11 +70,13 @@ async def send_photo_to_admins(
     sent_count = 0
     for admin_id in admin_ids:
         try:
-            await context.bot.send_photo(
-                chat_id=admin_id,
-                photo=photo_file_id,
-                caption=caption,
-                parse_mode='HTML',
+            await _send_photo_with_fallback(
+                context,
+                admin_id,
+                photo_file_id,
+                caption,
+                photo_log_label="фотографии",
+                message_log_label="Сообщение после фотографии",
             )
             sent_count += 1
             logger.info("Фотография отправлена админу %s", admin_id)
@@ -80,6 +84,46 @@ async def send_photo_to_admins(
             logger.exception("Ошибка отправки фотографии админу %s: %s", admin_id, e)
 
     logger.info("Фотография отправлена %s из %s админов", sent_count, len(admin_ids))
+
+
+async def _send_photo_with_fallback(
+    context: ContextTypes.DEFAULT_TYPE,
+    admin_id: int,
+    photo: str,
+    caption: str,
+    *,
+    photo_log_label: str,
+    message_log_label: str,
+):
+    """Отправляет фото, а если подпись слишком длинная — фото и текст отдельными сообщениями."""
+    normalized_caption = (caption or "").strip()
+    if not normalized_caption:
+        await context.bot.send_photo(chat_id=admin_id, photo=photo)
+        return
+
+    if len(normalized_caption) <= TELEGRAM_MEDIA_CAPTION_LIMIT:
+        await context.bot.send_photo(
+            chat_id=admin_id,
+            photo=photo,
+            caption=normalized_caption,
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    logger.info(
+        "Подпись для %s админу %s длиннее лимита Telegram (%s > %s), отправляем отдельно",
+        photo_log_label,
+        admin_id,
+        len(normalized_caption),
+        TELEGRAM_MEDIA_CAPTION_LIMIT,
+    )
+    await context.bot.send_photo(chat_id=admin_id, photo=photo)
+    await context.bot.send_message(
+        chat_id=admin_id,
+        text=normalized_caption,
+        parse_mode=ParseMode.HTML,
+    )
+    logger.info("%s отправлено админу %s отдельным сообщением", message_log_label, admin_id)
 
 
 async def send_photo_url_to_admins(
@@ -99,14 +143,28 @@ async def send_photo_url_to_admins(
     sent_count = 0
     for admin_id in admin_ids:
         try:
-            await context.bot.send_photo(
-                chat_id=admin_id,
-                photo=photo_url,
-                caption=caption,
-                parse_mode=ParseMode.HTML,
+            await _send_photo_with_fallback(
+                context,
+                admin_id,
+                photo_url,
+                caption,
+                photo_log_label="фотографии по URL",
+                message_log_label="Сообщение после фотографии по URL",
             )
             sent_count += 1
             logger.info("Фотография по URL отправлена админу %s", admin_id)
+        except BadRequest as e:
+            if "caption is too long" not in str(e).lower():
+                logger.exception("Ошибка отправки фотографии по URL админу %s: %s", admin_id, e)
+                continue
+            await context.bot.send_photo(chat_id=admin_id, photo=photo_url)
+            await context.bot.send_message(
+                chat_id=admin_id,
+                text=caption,
+                parse_mode=ParseMode.HTML,
+            )
+            sent_count += 1
+            logger.info("Фотография по URL и длинное сообщение отправлены админу %s через fallback", admin_id)
         except Exception as e:
             logger.exception("Ошибка отправки фотографии по URL админу %s: %s", admin_id, e)
 

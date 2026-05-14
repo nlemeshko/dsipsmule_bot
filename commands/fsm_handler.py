@@ -201,13 +201,6 @@ async def _save_first_stage_submission(update: Update, context: ContextTypes.DEF
     storage_key = get_first_stage_storage_key(category_code if registration_found else None)
     materials = _get_first_stage_materials(context)
     work_text = first_stage_data.get("work_text", "")
-    if registration_found and registration and (registration.get("avatar_url") or "").strip():
-        if not _has_first_stage_material_type(materials, "photo"):
-            materials.append({
-                "type": "photo",
-                "url": registration["avatar_url"].strip(),
-                "file_id": "",
-            })
 
     normalized_materials = []
     for material in materials:
