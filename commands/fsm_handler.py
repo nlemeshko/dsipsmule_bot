@@ -46,6 +46,7 @@ from commands.nassal2026 import (
     send_category_guide,
     send_registration_summary,
     send_success_message,
+    NASSAL_FINAL_SUCCESS_TEXT,
     NASSAL_FIRST_STAGE_SUCCESS_TEXT,
 )
 from storage.s3_registry import (
@@ -53,11 +54,13 @@ from storage.s3_registry import (
     append_first_stage_submission_row,
     build_registration_row,
     build_first_stage_submission_row,
+    get_final_storage_key,
     get_first_stage_storage_key,
     load_registration_rows,
     registration_exists,
     _normalize_participants,
     upload_avatar_bytes,
+    upload_final_file_bytes,
     upload_first_stage_file_bytes,
 )
 
@@ -77,6 +80,28 @@ NASSAL_FIRST_STAGE_TEXT_QUESTION = (
     "Есть ли <b>текст</b> к этой работе?\n"
     "Ответьте, пожалуйста, <b>да</b> или <b>нет</b>."
 )
+NASSAL_FINAL_CONTINUE_TEXT = (
+    "Материал добавлен.\n\n"
+    "Можешь прислать ещё <b>ссылку, фото или аудио</b> для <b>Финала</b>.\n"
+    "Когда всё отправишь, напиши <b>готово</b>."
+)
+
+
+def _get_stage_kind(context: ContextTypes.DEFAULT_TYPE) -> str:
+    first_stage_data = context.user_data.get("nassal_first_stage", {})
+    return first_stage_data.get("stage_kind", "first_stage")
+
+
+def _get_stage_label(context: ContextTypes.DEFAULT_TYPE) -> str:
+    return "Финала" if _get_stage_kind(context) == "final" else "Этапа I"
+
+
+def _get_stage_continue_text(context: ContextTypes.DEFAULT_TYPE) -> str:
+    return NASSAL_FINAL_CONTINUE_TEXT if _get_stage_kind(context) == "final" else NASSAL_FIRST_STAGE_CONTINUE_TEXT
+
+
+def _get_stage_success_text(context: ContextTypes.DEFAULT_TYPE) -> str:
+    return NASSAL_FINAL_SUCCESS_TEXT if _get_stage_kind(context) == "final" else NASSAL_FIRST_STAGE_SUCCESS_TEXT
 
 
 def _get_first_stage_materials(context: ContextTypes.DEFAULT_TYPE) -> list[dict]:
@@ -162,7 +187,13 @@ def _truncate_first_stage_admin_value(value: str, limit: int = FIRST_STAGE_ADMIN
     return f"{normalized[:limit].rstrip()}... [обрезано]"
 
 
-def _build_first_stage_admin_message(update: Update, submission_row: dict, registration_found: bool) -> str:
+def _build_first_stage_admin_message(
+    update: Update,
+    submission_row: dict,
+    registration_found: bool,
+    stage_kind: str = "first_stage",
+) -> str:
+    stage_title = "Финала" if stage_kind == "final" else "Этапа I"
     user_id = update.effective_user.id
     user_info = f"@{update.effective_user.username}" if update.effective_user.username else f"ID{user_id}"
     work_type = submission_row.get("work_type", "").strip()
@@ -173,7 +204,7 @@ def _build_first_stage_admin_message(update: Update, submission_row: dict, regis
     text_block = _truncate_first_stage_admin_value(submission_row.get("work_text", "").strip())
 
     return (
-        "📝 <b>Новая работа для Этапа I NASSAL2026</b>\n\n"
+        f"📝 <b>Новая работа для {stage_title} NASSAL2026</b>\n\n"
         f"<b>Telegram:</b> {user_info}\n"
         f"<b>Имя в Telegram:</b> {update.effective_user.full_name or 'Без имени'}\n"
         f"<b>Участник(и):</b> {submission_row['participants']}\n"
@@ -188,6 +219,8 @@ def _build_first_stage_admin_message(update: Update, submission_row: dict, regis
 async def _save_first_stage_submission(update: Update, context: ContextTypes.DEFAULT_TYPE, msg):
     user_id = update.effective_user.id
     first_stage_data = context.user_data.get("nassal_first_stage", {})
+    stage_kind = _get_stage_kind(context)
+    stage_label = _get_stage_label(context)
     registration = first_stage_data.get("registration")
     registration_found = bool(first_stage_data.get("registration_found"))
 
@@ -198,7 +231,11 @@ async def _save_first_stage_submission(update: Update, context: ContextTypes.DEF
     )
     category_code = registration.get("category_code") if registration else ""
     category_name = registration.get("category_name") if registration else "other"
-    storage_key = get_first_stage_storage_key(category_code if registration_found else None)
+    storage_key = (
+        get_final_storage_key(category_code if registration_found else None)
+        if stage_kind == "final"
+        else get_first_stage_storage_key(category_code if registration_found else None)
+    )
     materials = _get_first_stage_materials(context)
     work_text = first_stage_data.get("work_text", "")
 
@@ -213,14 +250,14 @@ async def _save_first_stage_submission(update: Update, context: ContextTypes.DEF
                 telegram_file = await context.bot.get_file(material_file_id)
                 file_bytes = bytes(await telegram_file.download_as_bytearray())
                 material_url = await asyncio.to_thread(
-                    upload_first_stage_file_bytes,
+                    upload_final_file_bytes if stage_kind == "final" else upload_first_stage_file_bytes,
                     file_bytes,
                     material_type,
                     telegram_file.file_path,
                     getattr(telegram_file, "mime_type", None),
                 )
             except Exception as exc:
-                logger.exception("Не удалось загрузить файл Этапа I в Object Storage: %s", exc)
+                logger.exception("Не удалось загрузить файл %s в Object Storage: %s", stage_label, exc)
         normalized_materials.append({
             "type": material_type,
             "url": material_url,
@@ -251,8 +288,7 @@ async def _save_first_stage_submission(update: Update, context: ContextTypes.DEF
         work_file_id=work_file_id,
         work_text=work_text,
     )
-
-    admin_message = _build_first_stage_admin_message(update, submission_row, registration_found)
+    admin_message = _build_first_stage_admin_message(update, submission_row, registration_found, stage_kind=stage_kind)
 
     try:
         if registration_found and registration and (registration.get("avatar_url") or "").strip():
@@ -269,11 +305,11 @@ async def _save_first_stage_submission(update: Update, context: ContextTypes.DEF
             material_url = material.get("url", "")
             material_file_id = material.get("file_id", "")
             if material_type == "photo" and material_file_id:
-                await send_photo_to_admins(context, material_file_id, material_url or "Фото для Этапа I")
+                await send_photo_to_admins(context, material_file_id, material_url or f"Фото для {stage_label}")
             elif material_type == "voice" and material_file_id:
-                await send_voice_to_admins(context, material_file_id, material_url or "Голосовое для Этапа I")
+                await send_voice_to_admins(context, material_file_id, material_url or f"Голосовое для {stage_label}")
             elif material_type == "audio" and material_file_id:
-                await send_audio_to_admins(context, material_file_id, material_url or "Аудио для Этапа I")
+                await send_audio_to_admins(context, material_file_id, material_url or f"Аудио для {stage_label}")
 
         await asyncio.to_thread(
             append_first_stage_submission_row,
@@ -281,13 +317,13 @@ async def _save_first_stage_submission(update: Update, context: ContextTypes.DEF
             submission_row,
         )
     except Exception as exc:
-        logger.exception("Не удалось сохранить работу Этапа I: %s", exc)
+        logger.exception("Не удалось сохранить работу %s: %s", stage_label, exc)
         await msg.reply_text(
-            "Не удалось сохранить работу для Этапа I.\n\nПожалуйста, попробуйте отправить материал ещё раз чуть позже."
+            f"Не удалось сохранить работу для {stage_label}.\n\nПожалуйста, попробуйте отправить материал ещё раз чуть позже."
         )
         return
 
-    await msg.reply_text(NASSAL_FIRST_STAGE_SUCCESS_TEXT, parse_mode='HTML')
+    await msg.reply_text(_get_stage_success_text(context), parse_mode='HTML')
     context.user_data.pop("nassal_first_stage", None)
     user_states.pop(user_id, None)
 
@@ -449,7 +485,7 @@ async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         if not _append_first_stage_material(context, "link", work_url=work_url):
             await msg.reply_text(
-                "Ссылка уже добавлена. Для Этапа I можно отправить только <b>одну ссылку</b>, одно <b>фото</b> и одно <b>аудио</b>.\n\n"
+                f"Ссылка уже добавлена. Для {_get_stage_label(context)} можно отправить только <b>одну ссылку</b>, одно <b>фото</b> и одно <b>аудио</b>.\n\n"
                 "Если всё готово, напиши <b>готово</b>.",
                 parse_mode='HTML',
             )
@@ -458,7 +494,7 @@ async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
             user_states[user_id] = NASSAL_FIRST_STAGE_TEXT_CONFIRM_STATE
             await msg.reply_text(NASSAL_FIRST_STAGE_TEXT_QUESTION, parse_mode='HTML')
             return
-        await msg.reply_text(NASSAL_FIRST_STAGE_CONTINUE_TEXT, parse_mode='HTML')
+        await msg.reply_text(_get_stage_continue_text(context), parse_mode='HTML')
         return
 
     elif user_states.get(user_id) == NASSAL_FIRST_STAGE_TEXT_CONFIRM_STATE:
@@ -570,7 +606,7 @@ async def handle_anon_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if not _append_first_stage_material(context, "photo", work_file_id=photo_id):
             await msg.reply_text(
-                "Фото уже добавлено. Для Этапа I можно отправить только <b>одно фото</b>.\n\n"
+                f"Фото уже добавлено. Для {_get_stage_label(context)} можно отправить только <b>одно фото</b>.\n\n"
                 "Если всё готово, напиши <b>готово</b>.",
                 parse_mode='HTML',
             )
@@ -584,7 +620,7 @@ async def handle_anon_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     parse_mode='HTML',
                 )
                 return
-        await msg.reply_text(NASSAL_FIRST_STAGE_CONTINUE_TEXT, parse_mode='HTML')
+        await msg.reply_text(_get_stage_continue_text(context), parse_mode='HTML')
         return
 
     if user_states.get(user_id) == ANON_STATE:
@@ -643,7 +679,7 @@ async def handle_anon_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if not _append_first_stage_material(context, "voice", work_file_id=voice_id):
             await msg.reply_text(
-                "Аудио уже добавлено. Для Этапа I можно отправить только <b>одно аудио</b> или <b>одно голосовое</b>.\n\n"
+                f"Аудио уже добавлено. Для {_get_stage_label(context)} можно отправить только <b>одно аудио</b> или <b>одно голосовое</b>.\n\n"
                 "Если всё готово, напиши <b>готово</b>.",
                 parse_mode='HTML',
             )
@@ -657,7 +693,7 @@ async def handle_anon_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     parse_mode='HTML',
                 )
                 return
-        await msg.reply_text(NASSAL_FIRST_STAGE_CONTINUE_TEXT, parse_mode='HTML')
+        await msg.reply_text(_get_stage_continue_text(context), parse_mode='HTML')
         return
 
 
@@ -680,7 +716,7 @@ async def handle_fsm_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not _append_first_stage_material(context, "audio", work_file_id=audio_id):
         await msg.reply_text(
-            "Аудио уже добавлено. Для Этапа I можно отправить только <b>одно аудио</b> или <b>одно голосовое</b>.\n\n"
+            f"Аудио уже добавлено. Для {_get_stage_label(context)} можно отправить только <b>одно аудио</b> или <b>одно голосовое</b>.\n\n"
             "Если всё готово, напиши <b>готово</b>.",
             parse_mode='HTML',
         )
@@ -694,5 +730,5 @@ async def handle_fsm_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode='HTML',
             )
             return
-    await msg.reply_text(NASSAL_FIRST_STAGE_CONTINUE_TEXT, parse_mode='HTML')
+    await msg.reply_text(_get_stage_continue_text(context), parse_mode='HTML')
     return

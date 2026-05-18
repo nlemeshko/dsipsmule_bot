@@ -16,7 +16,7 @@ from commands.callback_handler import (
     NASSAL_FIRST_STAGE_LINK_STATE,
 )
 from commands.common import build_binary_stream
-from storage.s3_registry import find_registration_by_user_id
+from storage.s3_registry import find_final_registration_by_user_id, find_registration_by_user_id
 
 
 NASSAL_IMAGE_PATH = 'images/nassal2026.png'
@@ -129,6 +129,49 @@ NASSAL_FIRST_STAGE_ALREADY_EXISTS_TEXT = """📝 <b>Этап I</b>
 {work_text_block}
 
 Если хочешь отправить новую работу, сначала удали текущую."""
+
+NASSAL_FINAL_FOUND_TEXT = """🏆 <b>Финал</b>
+
+Мы нашли тебя в списке финалистов.
+
+<b>Участник(и):</b> {participants}
+<b>Корзина:</b> {category_name}
+
+<b>ТЕМА ФИНАЛА</b>
+{final_topic}
+
+Теперь можешь присылать <b>ссылки, фото и аудио</b> хоть несколькими сообщениями.
+
+Когда всё отправишь, напиши <b>готово</b>."""
+
+NASSAL_FINAL_NOT_FOUND_TEXT = """⚠️ <b>Финал</b>
+
+Мы не нашли тебя в списке финалистов.
+
+Доступ к этой кнопке должен открываться только тем, кто есть в финальном реестре.
+Если это ошибка, напиши администраторам."""
+
+NASSAL_FINAL_SUCCESS_TEXT = """✅ <b>Спасибо!</b>
+
+Твоя работа для <b>Финала</b> принята и передана администраторам."""
+
+NASSAL_FINAL_ALREADY_EXISTS_TEXT = """🏆 <b>Финал</b>
+
+Твоя работа уже сохранена.
+
+<b>Участник(и):</b> {participants}
+<b>Корзина:</b> {category_name}
+<b>Материал:</b> {work_label}
+{work_text_block}
+
+Если хочешь отправить новую работу, сначала удали текущую."""
+
+NASSAL_FINAL_TOPICS = {
+    "1": "1. Лучшее - Исполнить свою лучшую композицию максимально наполнив ее музыкальными фишками",
+    "2": "2. Металл - Дать максимального рока в этой дыре - исполнить лучшее рок произведение которые Вы можете",
+    "3": "3. Дисс - (Все понятно написать дисс на любого из участвующих конкурентов или на всех или на организаторов)",
+    "4": "4. Смешное - (Сделать самое смешное исполнение любой песни или придумать свою чтобы рассмешить всех)",
+}
 
 
 def build_baskets_status_text(registrations: list[dict]) -> str:
@@ -329,32 +372,57 @@ async def nassal2026_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def start_first_stage_submission(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Запускает отправку работы для Этапа I."""
+    await start_stage_submission(update, context, stage_kind="first_stage")
+
+
+async def start_final_submission(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Запускает отправку работы для финала."""
+    await start_stage_submission(update, context, stage_kind="final")
+
+
+async def start_stage_submission(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    stage_kind: str = "first_stage",
+):
+    """Запускает отправку работы для выбранного этапа."""
     user_id = update.effective_user.id
     chat = update.effective_chat
     msg = update.effective_message
+    stage_label = "Финала" if stage_kind == "final" else "Этапа I"
 
     if not chat or chat.type != "private":
-        await msg.reply_text("Отправка работы для Этапа I доступна только в личных сообщениях с ботом.")
+        await msg.reply_text(f"Отправка работы для {stage_label} доступна только в личных сообщениях с ботом.")
         return
 
     registration = None
     try:
-        registration = await asyncio.to_thread(find_registration_by_user_id, user_id)
+        finder = find_final_registration_by_user_id if stage_kind == "final" else find_registration_by_user_id
+        registration = await asyncio.to_thread(finder, user_id)
     except Exception:
         registration = None
 
-    from storage.s3_registry import find_first_stage_submission_by_user_id
+    if stage_kind == "final" and registration is None:
+        await context.bot.send_message(
+            chat_id=chat.id,
+            text=NASSAL_FINAL_NOT_FOUND_TEXT,
+            parse_mode="HTML",
+        )
+        return
+
+    from storage.s3_registry import find_final_submission_by_user_id, find_first_stage_submission_by_user_id
 
     existing_submission = None
     try:
-        existing_submission = await asyncio.to_thread(find_first_stage_submission_by_user_id, user_id)
+        submission_finder = find_final_submission_by_user_id if stage_kind == "final" else find_first_stage_submission_by_user_id
+        existing_submission = await asyncio.to_thread(submission_finder, user_id)
     except Exception:
         existing_submission = None
 
     if existing_submission is not None:
         _, submission = existing_submission
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Удалить работу", callback_data="nassal_first_stage_delete")]
+            [InlineKeyboardButton("Удалить работу", callback_data="nassal_final_delete" if stage_kind == "final" else "nassal_first_stage_delete")]
         ])
         work_type = (submission.get("work_type") or "").strip()
         work_url = escape(submission.get("work_url", "Не указана"))
@@ -370,7 +438,8 @@ async def start_first_stage_submission(update: Update, context: ContextTypes.DEF
         else:
             work_label = work_url
         work_text_block = f"<b>Текст:</b> {work_text}" if work_text else "<b>Текст:</b> нет"
-        text = NASSAL_FIRST_STAGE_ALREADY_EXISTS_TEXT.format(
+        already_exists_text = NASSAL_FINAL_ALREADY_EXISTS_TEXT if stage_kind == "final" else NASSAL_FIRST_STAGE_ALREADY_EXISTS_TEXT
+        text = already_exists_text.format(
             participants=escape(submission.get("participants", "Не указано")),
             category_name=escape(submission.get("category_name", "Не указана") or "other"),
             work_label=work_label,
@@ -385,6 +454,7 @@ async def start_first_stage_submission(update: Update, context: ContextTypes.DEF
         return
 
     context.user_data["nassal_first_stage"] = {
+        "stage_kind": stage_kind,
         "registration_found": registration is not None,
         "registration": registration,
     }
@@ -401,9 +471,19 @@ async def start_first_stage_submission(update: Update, context: ContextTypes.DEF
     participants = escape(registration.get("participants", "Не указано"))
     category_name = escape(registration.get("category_name", "Не указана"))
     avatar_url = (registration.get("avatar_url") or "").strip()
-    caption = NASSAL_FIRST_STAGE_FOUND_TEXT.format(
+    caption_template = NASSAL_FINAL_FOUND_TEXT if stage_kind == "final" else NASSAL_FIRST_STAGE_FOUND_TEXT
+    final_topic = ""
+    if stage_kind == "final":
+        final_topic = escape(
+            NASSAL_FINAL_TOPICS.get(
+                (registration.get("category_code") or "").strip(),
+                "Тема не найдена. Напиши администраторам, если это ошибка.",
+            )
+        )
+    caption = caption_template.format(
         participants=participants,
         category_name=category_name,
+        final_topic=final_topic,
     )
     if avatar_url:
         await context.bot.send_photo(

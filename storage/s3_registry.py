@@ -20,9 +20,12 @@ logger = logging.getLogger(__name__)
 S3_ENDPOINT_URL = "https://nbg1.your-objectstorage.com"
 S3_BUCKET_NAME = "nassal2026"
 S3_REGISTRATIONS_KEY = "registrations/nassal2026_registrations.csv"
+S3_FINAL_REGISTRATIONS_KEY = "registrations/nassal2026_final.csv"
 S3_AVATARS_PREFIX = "avatars"
 S3_FIRST_STAGE_PREFIX = "first_stage"
 S3_FIRST_STAGE_FILES_PREFIX = "first_stage_files"
+S3_FINAL_PREFIX = "final"
+S3_FINAL_FILES_PREFIX = "final_files"
 CSV_HEADERS = [
     "registered_at_utc",
     "telegram_user_id",
@@ -124,10 +127,39 @@ def load_registration_rows() -> list[dict]:
         raise
 
 
+def load_final_registration_rows() -> list[dict]:
+    """Возвращает все строки финалистов из CSV-файла в Object Storage."""
+    client = _get_s3_client()
+
+    try:
+        response = client.get_object(Bucket=S3_BUCKET_NAME, Key=S3_FINAL_REGISTRATIONS_KEY)
+        existing_csv = response["Body"].read().decode("utf-8")
+        reader = csv.DictReader(io.StringIO(existing_csv))
+        return [_normalize_registration_row(row) for row in reader]
+    except client.exceptions.NoSuchKey:
+        logger.info("CSV-файл финалистов ещё не существует")
+        return []
+    except Exception as exc:
+        error_code = getattr(exc, "response", {}).get("Error", {}).get("Code")
+        if error_code in {"NoSuchKey", "404"}:
+            logger.info("CSV-файл финалистов ещё не существует")
+            return []
+        raise
+
+
 def find_registration_by_user_id(user_id: int) -> dict | None:
     """Ищет регистрацию пользователя по Telegram user_id."""
     user_id_str = str(user_id)
     for row in load_registration_rows():
+        if row.get("telegram_user_id", "") == user_id_str:
+            return row
+    return None
+
+
+def find_final_registration_by_user_id(user_id: int) -> dict | None:
+    """Ищет финалиста по Telegram user_id."""
+    user_id_str = str(user_id)
+    for row in load_final_registration_rows():
         if row.get("telegram_user_id", "") == user_id_str:
             return row
     return None
@@ -246,6 +278,40 @@ def upload_first_stage_file_bytes(
     )
     object_key = (
         f"{S3_FIRST_STAGE_FILES_PREFIX}/"
+        f"{datetime.now(UTC).strftime('%Y/%m/%d')}/"
+        f"{uuid4().hex}{extension}"
+    )
+
+    guessed_content_type = (
+        content_type
+        or mimetypes.guess_type(f"work{extension}")[0]
+        or "application/octet-stream"
+    )
+    client.put_object(
+        Bucket=S3_BUCKET_NAME,
+        Key=object_key,
+        Body=file_bytes,
+        ContentType=guessed_content_type,
+    )
+    return _build_public_object_url(object_key)
+
+
+def upload_final_file_bytes(
+    file_bytes: bytes,
+    work_type: str,
+    telegram_file_path: str | None = None,
+    content_type: str | None = None,
+) -> str:
+    """Загружает файл финала в Object Storage и возвращает публичный URL."""
+    client = _get_s3_client()
+
+    extension = _resolve_media_extension(
+        telegram_file_path=telegram_file_path,
+        content_type=content_type,
+        work_type=work_type,
+    )
+    object_key = (
+        f"{S3_FINAL_FILES_PREFIX}/"
         f"{datetime.now(UTC).strftime('%Y/%m/%d')}/"
         f"{uuid4().hex}{extension}"
     )
@@ -402,6 +468,14 @@ def get_first_stage_storage_key(category_code: str | None) -> str:
     return f"{S3_FIRST_STAGE_PREFIX}/other.csv"
 
 
+def get_final_storage_key(category_code: str | None) -> str:
+    """Возвращает ключ CSV-файла для сохранения работы финала."""
+    normalized_category_code = (category_code or "").strip()
+    if normalized_category_code in {"1", "2", "3", "4"}:
+        return f"{S3_FINAL_PREFIX}/{normalized_category_code}.csv"
+    return f"{S3_FINAL_PREFIX}/other.csv"
+
+
 def _get_all_first_stage_storage_keys() -> list[str]:
     """Возвращает список всех CSV первого этапа."""
     return [
@@ -411,6 +485,63 @@ def _get_all_first_stage_storage_keys() -> list[str]:
         f"{S3_FIRST_STAGE_PREFIX}/4.csv",
         f"{S3_FIRST_STAGE_PREFIX}/other.csv",
     ]
+
+
+def _get_all_final_storage_keys() -> list[str]:
+    """Возвращает список всех CSV финала."""
+    return [
+        f"{S3_FINAL_PREFIX}/1.csv",
+        f"{S3_FINAL_PREFIX}/2.csv",
+        f"{S3_FINAL_PREFIX}/3.csv",
+        f"{S3_FINAL_PREFIX}/4.csv",
+        f"{S3_FINAL_PREFIX}/other.csv",
+    ]
+
+
+def find_final_submission_by_user_id(user_id: int) -> tuple[str, dict] | None:
+    """Ищет работу пользователя во всех CSV финала."""
+    user_id_str = str(user_id)
+    for storage_key in _get_all_final_storage_keys():
+        for row in load_first_stage_rows(storage_key):
+            if row.get("telegram_user_id", "") == user_id_str:
+                return storage_key, row
+    return None
+
+
+def delete_final_submission_by_user_id(user_id: int) -> tuple[str, dict] | None:
+    """Удаляет работу пользователя из CSV финала и возвращает удалённую строку."""
+    client = _get_s3_client()
+    found_submission = find_final_submission_by_user_id(user_id)
+    if found_submission is None:
+        return None
+
+    storage_key, existing_row = found_submission
+    rows = load_first_stage_rows(storage_key)
+    user_id_str = str(user_id)
+
+    deleted_row = None
+    remaining_rows = []
+    for row in rows:
+        if deleted_row is None and row.get("telegram_user_id", "") == user_id_str:
+            deleted_row = row
+            continue
+        remaining_rows.append(row)
+
+    if deleted_row is None:
+        return None
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=FIRST_STAGE_HEADERS)
+    writer.writeheader()
+    writer.writerows(remaining_rows)
+
+    client.put_object(
+        Bucket=S3_BUCKET_NAME,
+        Key=storage_key,
+        Body=output.getvalue().encode("utf-8"),
+        ContentType="text/csv; charset=utf-8",
+    )
+    return storage_key, existing_row
 
 
 def _normalize_registration_row(row: dict) -> dict:

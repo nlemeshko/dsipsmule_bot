@@ -4,18 +4,32 @@
 Команда /start с кнопочным меню
 """
 
+import asyncio
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from commands.common import build_binary_stream
+from storage.s3_registry import find_final_registration_by_user_id
+
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /start"""
     chat_type = update.effective_chat.type
     
     if chat_type == "private":
+        final_registration = None
+        try:
+            final_registration = await asyncio.to_thread(find_final_registration_by_user_id, update.effective_user.id)
+        except Exception:
+            final_registration = None
+
+        stage_button_text = "🏆 Финал" if final_registration is not None else "📝 Этап I"
+        stage_button_callback = "button_nassal_final" if final_registration is not None else "button_nassal_first_stage"
+
         # Создаем кнопочное меню для личных сообщений
         keyboard_rows = [
             [
-                InlineKeyboardButton("📝 Этап I", callback_data="button_nassal_first_stage")
+                InlineKeyboardButton(stage_button_text, callback_data=stage_button_callback)
             ],
             [
                 InlineKeyboardButton("🕵 Анонимка", callback_data="button1"),

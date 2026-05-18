@@ -195,6 +195,18 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 "Не удалось запустить отправку работы для Этапа I. Попробуйте чуть позже."
             )
 
+    elif query.data == "button_nassal_final":
+        from commands.nassal2026 import start_final_submission
+
+        try:
+            await start_final_submission(update, context)
+        except Exception as e:
+            print(f"Ошибка при запуске Финала NASSAL2026: {e}")
+            await context.bot.send_message(
+                chat_id,
+                "Не удалось запустить отправку работы для Финала. Попробуйте чуть позже."
+            )
+
     elif query.data == "nassal_show_status":
         from storage.s3_registry import load_registration_rows
         from commands.nassal2026 import send_baskets_status_message
@@ -257,4 +269,30 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await context.bot.send_message(
                 chat_id,
                 "Не удалось удалить работу для Этапа I. Попробуйте чуть позже."
+            )
+
+    elif query.data == "nassal_final_delete":
+        from storage.s3_registry import delete_final_submission_by_user_id
+
+        try:
+            deleted_submission = await asyncio.to_thread(delete_final_submission_by_user_id, user_id)
+            context.user_data.pop("nassal_first_stage", None)
+            user_states.pop(user_id, None)
+            if deleted_submission is None:
+                await context.bot.send_message(
+                    chat_id,
+                    "Похоже, сохранённая работа для Финала уже не найдена."
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id,
+                    "🗑️ Работа для Финала удалена.\n\n"
+                    "Нажми `Финал` ещё раз, если хочешь отправить новую ссылку.",
+                    parse_mode="Markdown",
+                )
+        except Exception as e:
+            print(f"Ошибка при удалении работы Финала: {e}")
+            await context.bot.send_message(
+                chat_id,
+                "Не удалось удалить работу для Финала. Попробуйте чуть позже."
             )
