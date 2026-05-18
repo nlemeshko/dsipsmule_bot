@@ -189,10 +189,10 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         try:
             await start_first_stage_submission(update, context)
         except Exception as e:
-            print(f"Ошибка при запуске Этапа I NASSAL2026: {e}")
+            print(f"Ошибка при запуске Этапа II NASSAL2026: {e}")
             await context.bot.send_message(
                 chat_id,
-                "Не удалось запустить отправку работы для Этапа I. Попробуйте чуть позже."
+                "Не удалось запустить отправку работы для Этапа II. Попробуйте чуть позже."
             )
 
     elif query.data == "button_nassal_final":
@@ -255,20 +255,20 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             if deleted_submission is None:
                 await context.bot.send_message(
                     chat_id,
-                    "Похоже, сохранённая работа для Этапа I уже не найдена."
+                    "Похоже, сохранённая работа для Этапа II уже не найдена."
                 )
             else:
                 await context.bot.send_message(
                     chat_id,
-                    "🗑️ Работа для Этапа I удалена.\n\n"
-                    "Нажми `Этап I` ещё раз, если хочешь отправить новую ссылку.",
+                    "🗑️ Работа для Этапа II удалена.\n\n"
+                    "Нажми `Этап II` ещё раз, если хочешь отправить новую ссылку.",
                     parse_mode="Markdown",
                 )
         except Exception as e:
-            print(f"Ошибка при удалении работы Этапа I: {e}")
+            print(f"Ошибка при удалении работы Этапа II: {e}")
             await context.bot.send_message(
                 chat_id,
-                "Не удалось удалить работу для Этапа I. Попробуйте чуть позже."
+                "Не удалось удалить работу для Этапа II. Попробуйте чуть позже."
             )
 
     elif query.data == "nassal_final_delete":
