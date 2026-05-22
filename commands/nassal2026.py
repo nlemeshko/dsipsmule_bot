@@ -22,6 +22,8 @@ from storage.s3_registry import find_final_registration_by_user_id, find_registr
 
 logger = logging.getLogger(__name__)
 TELEGRAM_PHOTO_CAPTION_LIMIT = 1024
+TELEGRAM_MESSAGE_TEXT_LIMIT = 4096
+DISPLAY_FIELD_LIMIT = 700
 
 
 NASSAL_IMAGE_PATH = 'images/nassal2026.png'
@@ -207,10 +209,27 @@ async def _send_photo_with_safe_caption(
     )
     await context.bot.send_message(
         chat_id=chat_id,
-        text=caption,
+        text=_truncate_plain_text(caption, TELEGRAM_MESSAGE_TEXT_LIMIT),
         parse_mode="HTML",
         reply_markup=reply_markup,
     )
+
+
+def _truncate_plain_text(value: str, limit: int, suffix: str = "\n\n[текст сокращён]") -> str:
+    """Обрезает текст до лимита Telegram, оставляя понятную пометку."""
+    normalized = value or ""
+    if len(normalized) <= limit:
+        return normalized
+    safe_limit = max(0, limit - len(suffix))
+    return f"{normalized[:safe_limit].rstrip()}{suffix}"
+
+
+def _truncate_display_field(value: str | None, limit: int = DISPLAY_FIELD_LIMIT) -> str:
+    """Ограничивает длину пользовательских полей для безопаского показа в Telegram."""
+    normalized = " ".join((value or "").split()).strip()
+    if len(normalized) <= limit:
+        return normalized or "Не указано"
+    return f"{normalized[:limit].rstrip()}... [сокращено]"
 
 
 def build_baskets_status_text(registrations: list[dict]) -> str:
@@ -346,12 +365,12 @@ async def send_registered_actions(context: ContextTypes.DEFAULT_TYPE, chat_id: i
         [InlineKeyboardButton("Удалиться", callback_data="nassal_delete_registration")],
     ])
     text = NASSAL_ALREADY_REGISTERED_TEXT.format(
-        participants=escape(registration.get("participants", "Не указано")),
-        category_name=escape(registration.get("category_name", "Не указана")),
+        participants=escape(_truncate_display_field(registration.get("participants"), 500)),
+        category_name=escape(_truncate_display_field(registration.get("category_name"), 250)),
     )
     await context.bot.send_message(
         chat_id=chat_id,
-        text=text,
+        text=_truncate_plain_text(text, TELEGRAM_MESSAGE_TEXT_LIMIT),
         parse_mode='HTML',
         reply_markup=keyboard,
     )
@@ -479,14 +498,14 @@ async def start_stage_submission(
         work_text_block = f"<b>Текст:</b> {work_text}" if work_text else "<b>Текст:</b> нет"
         already_exists_text = NASSAL_FINAL_ALREADY_EXISTS_TEXT if stage_kind == "final" else NASSAL_FIRST_STAGE_ALREADY_EXISTS_TEXT
         text = already_exists_text.format(
-            participants=escape(submission.get("participants", "Не указано")),
-            category_name=escape(submission.get("category_name", "Не указана") or "other"),
+            participants=escape(_truncate_display_field(submission.get("participants"), 500)),
+            category_name=escape(_truncate_display_field(submission.get("category_name") or "other", 250)),
             work_label=work_label,
             work_text_block=work_text_block,
         )
         await context.bot.send_message(
             chat_id=chat.id,
-            text=text,
+            text=_truncate_plain_text(text, TELEGRAM_MESSAGE_TEXT_LIMIT),
             parse_mode="HTML",
             reply_markup=keyboard,
         )
@@ -507,8 +526,10 @@ async def start_stage_submission(
         )
         return
 
-    participants = escape(registration.get("participants", "Не указано"))
-    category_name = escape(registration.get("category_name", "Не указана"))
+    participants_raw = _truncate_display_field(registration.get("participants"), 500)
+    category_name_raw = _truncate_display_field(registration.get("category_name"), 250)
+    participants = escape(participants_raw)
+    category_name = escape(category_name_raw)
     avatar_url = (registration.get("avatar_url") or "").strip()
     caption_template = NASSAL_FINAL_FOUND_TEXT if stage_kind == "final" else NASSAL_FIRST_STAGE_FOUND_TEXT
     final_topic = ""
@@ -524,16 +545,24 @@ async def start_stage_submission(
         category_name=category_name,
         final_topic=final_topic,
     )
+    logger.info(
+        "NASSAL %s message lengths for user %s: participants=%s, category=%s, caption=%s",
+        stage_kind,
+        user_id,
+        len(participants_raw),
+        len(category_name_raw),
+        len(caption),
+    )
     if avatar_url:
         await _send_photo_with_safe_caption(
             context=context,
             chat_id=chat.id,
             photo=avatar_url,
-            caption=caption,
+            caption=_truncate_plain_text(caption, TELEGRAM_MESSAGE_TEXT_LIMIT),
         )
     else:
         await context.bot.send_message(
             chat_id=chat.id,
-            text=caption,
+            text=_truncate_plain_text(caption, TELEGRAM_MESSAGE_TEXT_LIMIT),
             parse_mode="HTML",
         )
