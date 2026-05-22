@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import logging
 from html import escape
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -17,6 +18,10 @@ from commands.callback_handler import (
 )
 from commands.common import build_binary_stream
 from storage.s3_registry import find_final_registration_by_user_id, find_registration_by_user_id
+
+
+logger = logging.getLogger(__name__)
+TELEGRAM_PHOTO_CAPTION_LIMIT = 1024
 
 
 NASSAL_IMAGE_PATH = 'images/nassal2026.png'
@@ -172,6 +177,40 @@ NASSAL_FINAL_TOPICS = {
     "3": "3. Дисс - (Все понятно написать дисс на любого из участвующих конкурентов или на всех или на организаторов)",
     "4": "4. Смешное - (Сделать самое смешное исполнение любой песни или придумать свою чтобы рассмешить всех)",
 }
+
+
+async def _send_photo_with_safe_caption(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    photo: str,
+    caption: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+):
+    """Отправляет фото с подписью, а если подпись слишком длинная — делит на два сообщения."""
+    if len(caption) <= TELEGRAM_PHOTO_CAPTION_LIMIT:
+        await context.bot.send_photo(
+            chat_id=chat_id,
+            photo=photo,
+            caption=caption,
+            parse_mode="HTML",
+            reply_markup=reply_markup,
+        )
+        return
+
+    logger.warning(
+        "Подпись к фото слишком длинная для Telegram caption (%s символов), отправляем отдельным сообщением",
+        len(caption),
+    )
+    await context.bot.send_photo(
+        chat_id=chat_id,
+        photo=photo,
+    )
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=caption,
+        parse_mode="HTML",
+        reply_markup=reply_markup,
+    )
 
 
 def build_baskets_status_text(registrations: list[dict]) -> str:
@@ -486,11 +525,11 @@ async def start_stage_submission(
         final_topic=final_topic,
     )
     if avatar_url:
-        await context.bot.send_photo(
+        await _send_photo_with_safe_caption(
+            context=context,
             chat_id=chat.id,
             photo=avatar_url,
             caption=caption,
-            parse_mode="HTML",
         )
     else:
         await context.bot.send_message(
