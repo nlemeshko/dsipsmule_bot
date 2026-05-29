@@ -10,6 +10,7 @@ import logging
 import mimetypes
 import os
 import re
+import time
 from pathlib import Path
 from datetime import datetime, UTC
 from uuid import uuid4
@@ -49,11 +50,23 @@ FIRST_STAGE_HEADERS = [
     "work_file_id",
     "work_text",
 ]
+S3_RETRYABLE_ERROR_CODES = {
+    "SlowDown",
+    "RequestTimeout",
+    "InternalError",
+    "InternalServerError",
+    "ServiceUnavailable",
+    "Throttling",
+}
+S3_MAX_ATTEMPTS = 10
+S3_MANUAL_RETRY_ATTEMPTS = 4
+S3_MANUAL_RETRY_BASE_DELAY_SECONDS = 1.0
 
 
 def _get_s3_client():
     try:
         import boto3
+        from botocore.config import Config
     except ImportError as exc:
         raise RuntimeError(
             "boto3 не установлен. Установите зависимости из requirements.txt"
@@ -70,7 +83,49 @@ def _get_s3_client():
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
         region_name="us-east-1",
+        config=Config(
+            retries={"max_attempts": S3_MAX_ATTEMPTS, "mode": "adaptive"},
+            connect_timeout=10,
+            read_timeout=60,
+        ),
     )
+
+
+def _is_retryable_s3_exception(exc: Exception) -> bool:
+    error_code = getattr(exc, "response", {}).get("Error", {}).get("Code")
+    if error_code in S3_RETRYABLE_ERROR_CODES:
+        return True
+
+    exc_name = exc.__class__.__name__
+    return exc_name in {
+        "ConnectionClosedError",
+        "ConnectTimeoutError",
+        "EndpointConnectionError",
+        "HTTPClientError",
+        "ReadTimeoutError",
+        "ResponseStreamingError",
+    }
+
+
+def _run_s3_operation(operation, *, operation_name: str, storage_key: str | None = None):
+    for attempt in range(1, S3_MANUAL_RETRY_ATTEMPTS + 1):
+        try:
+            return operation()
+        except Exception as exc:
+            if not _is_retryable_s3_exception(exc) or attempt == S3_MANUAL_RETRY_ATTEMPTS:
+                raise
+
+            delay_seconds = S3_MANUAL_RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1))
+            logger.warning(
+                "Повторяем S3 %s для %s после ошибки %s (попытка %s/%s, ждём %.1fс)",
+                operation_name,
+                storage_key or "unknown key",
+                exc,
+                attempt,
+                S3_MANUAL_RETRY_ATTEMPTS,
+                delay_seconds,
+            )
+            time.sleep(delay_seconds)
 
 
 def append_registration_row(registration: dict):
@@ -79,7 +134,11 @@ def append_registration_row(registration: dict):
 
     rows = []
     try:
-        response = client.get_object(Bucket=S3_BUCKET_NAME, Key=S3_REGISTRATIONS_KEY)
+        response = _run_s3_operation(
+            lambda: client.get_object(Bucket=S3_BUCKET_NAME, Key=S3_REGISTRATIONS_KEY),
+            operation_name="get_object",
+            storage_key=S3_REGISTRATIONS_KEY,
+        )
         existing_csv = response["Body"].read().decode("utf-8")
         reader = csv.DictReader(io.StringIO(existing_csv))
         rows.extend(_normalize_registration_row(row) for row in reader)
@@ -99,11 +158,15 @@ def append_registration_row(registration: dict):
     writer.writeheader()
     writer.writerows(rows)
 
-    client.put_object(
-        Bucket=S3_BUCKET_NAME,
-        Key=S3_REGISTRATIONS_KEY,
-        Body=output.getvalue().encode("utf-8"),
-        ContentType="text/csv; charset=utf-8",
+    _run_s3_operation(
+        lambda: client.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=S3_REGISTRATIONS_KEY,
+            Body=output.getvalue().encode("utf-8"),
+            ContentType="text/csv; charset=utf-8",
+        ),
+        operation_name="put_object",
+        storage_key=S3_REGISTRATIONS_KEY,
     )
 
 
@@ -112,7 +175,11 @@ def load_registration_rows() -> list[dict]:
     client = _get_s3_client()
 
     try:
-        response = client.get_object(Bucket=S3_BUCKET_NAME, Key=S3_REGISTRATIONS_KEY)
+        response = _run_s3_operation(
+            lambda: client.get_object(Bucket=S3_BUCKET_NAME, Key=S3_REGISTRATIONS_KEY),
+            operation_name="get_object",
+            storage_key=S3_REGISTRATIONS_KEY,
+        )
         existing_csv = response["Body"].read().decode("utf-8")
         reader = csv.DictReader(io.StringIO(existing_csv))
         return [_normalize_registration_row(row) for row in reader]
@@ -132,7 +199,11 @@ def load_final_registration_rows() -> list[dict]:
     client = _get_s3_client()
 
     try:
-        response = client.get_object(Bucket=S3_BUCKET_NAME, Key=S3_FINAL_REGISTRATIONS_KEY)
+        response = _run_s3_operation(
+            lambda: client.get_object(Bucket=S3_BUCKET_NAME, Key=S3_FINAL_REGISTRATIONS_KEY),
+            operation_name="get_object",
+            storage_key=S3_FINAL_REGISTRATIONS_KEY,
+        )
         existing_csv = response["Body"].read().decode("utf-8")
         reader = csv.DictReader(io.StringIO(existing_csv))
         return [_normalize_registration_row(row) for row in reader]
@@ -203,11 +274,15 @@ def delete_registration_by_user_id(user_id: int) -> dict | None:
     writer.writeheader()
     writer.writerows(remaining_rows)
 
-    client.put_object(
-        Bucket=S3_BUCKET_NAME,
-        Key=S3_REGISTRATIONS_KEY,
-        Body=output.getvalue().encode("utf-8"),
-        ContentType="text/csv; charset=utf-8",
+    _run_s3_operation(
+        lambda: client.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=S3_REGISTRATIONS_KEY,
+            Body=output.getvalue().encode("utf-8"),
+            ContentType="text/csv; charset=utf-8",
+        ),
+        operation_name="put_object",
+        storage_key=S3_REGISTRATIONS_KEY,
     )
     return deleted_row
 
@@ -253,11 +328,15 @@ def upload_avatar_bytes(
     )
 
     guessed_content_type = content_type or mimetypes.guess_type(f"avatar{extension}")[0] or "application/octet-stream"
-    client.put_object(
-        Bucket=S3_BUCKET_NAME,
-        Key=object_key,
-        Body=avatar_bytes,
-        ContentType=guessed_content_type,
+    _run_s3_operation(
+        lambda: client.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=object_key,
+            Body=avatar_bytes,
+            ContentType=guessed_content_type,
+        ),
+        operation_name="put_object",
+        storage_key=object_key,
     )
     return _build_public_object_url(object_key)
 
@@ -287,11 +366,15 @@ def upload_first_stage_file_bytes(
         or mimetypes.guess_type(f"work{extension}")[0]
         or "application/octet-stream"
     )
-    client.put_object(
-        Bucket=S3_BUCKET_NAME,
-        Key=object_key,
-        Body=file_bytes,
-        ContentType=guessed_content_type,
+    _run_s3_operation(
+        lambda: client.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=object_key,
+            Body=file_bytes,
+            ContentType=guessed_content_type,
+        ),
+        operation_name="put_object",
+        storage_key=object_key,
     )
     return _build_public_object_url(object_key)
 
@@ -321,11 +404,15 @@ def upload_final_file_bytes(
         or mimetypes.guess_type(f"work{extension}")[0]
         or "application/octet-stream"
     )
-    client.put_object(
-        Bucket=S3_BUCKET_NAME,
-        Key=object_key,
-        Body=file_bytes,
-        ContentType=guessed_content_type,
+    _run_s3_operation(
+        lambda: client.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=object_key,
+            Body=file_bytes,
+            ContentType=guessed_content_type,
+        ),
+        operation_name="put_object",
+        storage_key=object_key,
     )
     return _build_public_object_url(object_key)
 
@@ -336,7 +423,11 @@ def append_first_stage_submission_row(storage_key: str, submission: dict):
 
     rows = []
     try:
-        response = client.get_object(Bucket=S3_BUCKET_NAME, Key=storage_key)
+        response = _run_s3_operation(
+            lambda: client.get_object(Bucket=S3_BUCKET_NAME, Key=storage_key),
+            operation_name="get_object",
+            storage_key=storage_key,
+        )
         existing_csv = response["Body"].read().decode("utf-8")
         reader = csv.DictReader(io.StringIO(existing_csv))
         rows.extend(_normalize_first_stage_row(row) for row in reader)
@@ -356,11 +447,15 @@ def append_first_stage_submission_row(storage_key: str, submission: dict):
     writer.writeheader()
     writer.writerows(rows)
 
-    client.put_object(
-        Bucket=S3_BUCKET_NAME,
-        Key=storage_key,
-        Body=output.getvalue().encode("utf-8"),
-        ContentType="text/csv; charset=utf-8",
+    _run_s3_operation(
+        lambda: client.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=storage_key,
+            Body=output.getvalue().encode("utf-8"),
+            ContentType="text/csv; charset=utf-8",
+        ),
+        operation_name="put_object",
+        storage_key=storage_key,
     )
 
 
@@ -369,7 +464,11 @@ def load_first_stage_rows(storage_key: str) -> list[dict]:
     client = _get_s3_client()
 
     try:
-        response = client.get_object(Bucket=S3_BUCKET_NAME, Key=storage_key)
+        response = _run_s3_operation(
+            lambda: client.get_object(Bucket=S3_BUCKET_NAME, Key=storage_key),
+            operation_name="get_object",
+            storage_key=storage_key,
+        )
         existing_csv = response["Body"].read().decode("utf-8")
         reader = csv.DictReader(io.StringIO(existing_csv))
         return [_normalize_first_stage_row(row) for row in reader]
@@ -421,11 +520,15 @@ def delete_first_stage_submission_by_user_id(user_id: int) -> tuple[str, dict] |
     writer.writeheader()
     writer.writerows(remaining_rows)
 
-    client.put_object(
-        Bucket=S3_BUCKET_NAME,
-        Key=storage_key,
-        Body=output.getvalue().encode("utf-8"),
-        ContentType="text/csv; charset=utf-8",
+    _run_s3_operation(
+        lambda: client.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=storage_key,
+            Body=output.getvalue().encode("utf-8"),
+            ContentType="text/csv; charset=utf-8",
+        ),
+        operation_name="put_object",
+        storage_key=storage_key,
     )
     return storage_key, existing_row
 
@@ -535,11 +638,15 @@ def delete_final_submission_by_user_id(user_id: int) -> tuple[str, dict] | None:
     writer.writeheader()
     writer.writerows(remaining_rows)
 
-    client.put_object(
-        Bucket=S3_BUCKET_NAME,
-        Key=storage_key,
-        Body=output.getvalue().encode("utf-8"),
-        ContentType="text/csv; charset=utf-8",
+    _run_s3_operation(
+        lambda: client.put_object(
+            Bucket=S3_BUCKET_NAME,
+            Key=storage_key,
+            Body=output.getvalue().encode("utf-8"),
+            ContentType="text/csv; charset=utf-8",
+        ),
+        operation_name="put_object",
+        storage_key=storage_key,
     )
     return storage_key, existing_row
 

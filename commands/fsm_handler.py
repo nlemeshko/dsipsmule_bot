@@ -290,15 +290,15 @@ async def _save_first_stage_submission(update: Update, context: ContextTypes.DEF
     )
     admin_message = _build_first_stage_admin_message(update, submission_row, registration_found, stage_kind=stage_kind)
 
-    try:
+    async def _notify_admins(admin_text: str):
         if registration_found and registration and (registration.get("avatar_url") or "").strip():
             await send_photo_url_to_admins(
                 context,
                 registration["avatar_url"].strip(),
-                admin_message,
+                admin_text,
             )
         else:
-            await send_to_admins(context, admin_message)
+            await send_to_admins(context, admin_text)
 
         for material in normalized_materials:
             material_type = material.get("type", "")
@@ -311,19 +311,41 @@ async def _save_first_stage_submission(update: Update, context: ContextTypes.DEF
             elif material_type == "audio" and material_file_id:
                 await send_audio_to_admins(context, material_file_id, material_url or f"Аудио для {stage_label}")
 
+    storage_error = None
+    try:
         await asyncio.to_thread(
             append_first_stage_submission_row,
             storage_key,
             submission_row,
         )
     except Exception as exc:
+        storage_error = exc
         logger.exception("Не удалось сохранить работу %s: %s", stage_label, exc)
+
+    if storage_error is not None:
+        admin_message = (
+            f"⚠️ <b>Автосохранение в Object Storage не удалось</b>\n"
+            f"<b>CSV:</b> <code>{storage_key}</code>\n"
+            f"<b>Причина:</b> <code>{type(storage_error).__name__}</code>\n\n"
+            f"{admin_message}"
+        )
+
+    try:
+        await _notify_admins(admin_message)
+    except Exception as exc:
+        logger.exception("Не удалось отправить работу %s админам: %s", stage_label, exc)
         await msg.reply_text(
-            f"Не удалось сохранить работу для {stage_label}.\n\nПожалуйста, попробуйте отправить материал ещё раз чуть позже."
+            f"Не удалось передать работу для {stage_label} админам.\n\nПожалуйста, попробуйте отправить материал ещё раз чуть позже."
         )
         return
 
-    await msg.reply_text(_get_stage_success_text(context), parse_mode='HTML')
+    if storage_error is not None:
+        await msg.reply_text(
+            f"Работа для {stage_label} передана админам, но автоматическое сохранение сейчас недоступно.\n\n"
+            "Админы получили материалы и смогут обработать их вручную, если проблема со storage повторится."
+        )
+    else:
+        await msg.reply_text(_get_stage_success_text(context), parse_mode='HTML')
     context.user_data.pop("nassal_first_stage", None)
     user_states.pop(user_id, None)
 
