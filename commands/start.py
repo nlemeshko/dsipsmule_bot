@@ -23,7 +23,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             final_registration = None
 
-        stage_button_text = "🏆 Финал" if final_registration is not None else "📝 III Этап"
+        stage_button_text = "🏆 Финал" if final_registration is not None else "📝 IV Этап"
         stage_button_callback = "button_nassal_final" if final_registration is not None else "button_nassal_first_stage"
 
         # Создаем кнопочное меню для личных сообщений
@@ -45,9 +45,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         keyboard = InlineKeyboardMarkup(keyboard_rows)
         
-        message = """📝 <b>III Этап уже открыт!</b>
+        message = """📝 <b>IV Этап уже открыт!</b>
 
-Первой кнопкой я вынес отправку работы для <b>III Этапа</b>, чтобы до неё можно было дотянуться сразу.
+Первой кнопкой я вынес отправку работы для <b>IV Этапа</b>, чтобы до неё можно было дотянуться сразу.
 Теперь этот этап доступен всем.
 
 🗡️ А если нужен другой контракт, вот всё меню:
@@ -61,7 +61,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 Если потеряешься — зови через /help. Я рядом."""
 
-        photo = build_binary_stream('images/3etap.png')
+        photo = build_binary_stream('images/4etap.png')
         if photo:
             await update.message.reply_photo(photo, caption=message, reply_markup=keyboard, parse_mode='HTML')
         else:

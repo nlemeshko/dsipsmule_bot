@@ -93,7 +93,7 @@ def _get_stage_kind(context: ContextTypes.DEFAULT_TYPE) -> str:
 
 
 def _get_stage_label(context: ContextTypes.DEFAULT_TYPE) -> str:
-    return "Финала" if _get_stage_kind(context) == "final" else "III Этапа"
+    return "Финала" if _get_stage_kind(context) == "final" else "IV Этапа"
 
 
 def _get_stage_continue_text(context: ContextTypes.DEFAULT_TYPE) -> str:
@@ -193,7 +193,7 @@ def _build_first_stage_admin_message(
     registration_found: bool,
     stage_kind: str = "first_stage",
 ) -> str:
-    stage_title = "Финала" if stage_kind == "final" else "III Этапа"
+    stage_title = "Финала" if stage_kind == "final" else "IV Этапа"
     user_id = update.effective_user.id
     user_info = f"@{update.effective_user.username}" if update.effective_user.username else f"ID{user_id}"
     work_type = submission_row.get("work_type", "").strip()
