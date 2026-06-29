@@ -15,7 +15,7 @@ from storage.s3_registry import find_final_registration_by_user_id
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /start"""
     chat_type = update.effective_chat.type
-    
+
     if chat_type == "private":
         final_registration = None
         try:
@@ -23,14 +23,14 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             final_registration = None
 
-        stage_button_text = "🏆 Финал" if final_registration is not None else "📝 IV Этап"
-        stage_button_callback = "button_nassal_final" if final_registration is not None else "button_nassal_first_stage"
+        keyboard_rows = []
+        if final_registration is not None:
+            keyboard_rows.append(
+                [InlineKeyboardButton("🏆 Финал", callback_data="button_nassal_final")]
+            )
 
         # Создаем кнопочное меню для личных сообщений
-        keyboard_rows = [
-            [
-                InlineKeyboardButton(stage_button_text, callback_data=stage_button_callback)
-            ],
+        keyboard_rows.extend([
             [
                 InlineKeyboardButton("🕵 Анонимка", callback_data="button1"),
                 InlineKeyboardButton("🎶 Песня", callback_data="button2")
@@ -42,13 +42,13 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [
                 InlineKeyboardButton("📢 Промо", callback_data="button6")
             ]
-        ]
+        ])
         keyboard = InlineKeyboardMarkup(keyboard_rows)
-        
-        message = """📝 <b>IV Этап уже открыт!</b>
 
-Первой кнопкой я вынес отправку работы для <b>IV Этапа</b>, чтобы до неё можно было дотянуться сразу.
-Теперь этот этап доступен всем.
+        if final_registration is not None:
+            message = """🏆 <b>Финал NASSAL2026 открыт!</b>
+
+Если ты есть в списке финалистов, первой кнопкой вынесена отправка работы для <b>Финала</b>.
 
 🗡️ А если нужен другой контракт, вот всё меню:
 
@@ -60,21 +60,36 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • 📢 Промо — поможем громко заявить о себе
 
 Если потеряешься — зови через /help. Я рядом."""
+            photo_path = 'images/final.png'
+        else:
+            message = """🗡️ <b>Меню контрактов</b>
 
-        photo = build_binary_stream('images/4etap.png')
+Кнопка <b>Финала</b> показывается только тем, кто есть в финальном списке.
+
+<b>Контракты:</b>
+• 🕵 Анонимка — передам записку без лишних вопросов
+• 🎶 Песня — предложи трек, добавим в архив
+• 🎧 Оценить — пришли ссылку, скажем честно
+• 🎲 Песня дня — что подсоветует Судьба сегодня
+• 📢 Промо — поможем громко заявить о себе
+
+Если потеряешься — зови через /help. Я рядом."""
+            photo_path = 'images/final.png'
+
+        photo = build_binary_stream(photo_path)
         if photo:
             await update.message.reply_photo(photo, caption=message, reply_markup=keyboard, parse_mode='HTML')
         else:
             await update.message.reply_text(message, reply_markup=keyboard, parse_mode='HTML')
-        
+
     elif chat_type == "channel":
         message = "🗡️ Бот Ведьмака активен в канале. Используйте /help для списка контрактов."
         await update.message.reply_text(message)
-        
+
     elif chat_type in ["group", "supergroup"]:
         message = "🗡️ Геральт на связи. Запускайте /help — выберем контракт."
         await update.message.reply_text(message)
-    
+
     else:
         message = "🗡️ Геральт здесь. Воспользуйся /help — там весь список возможностей."
         await update.message.reply_text(message)
