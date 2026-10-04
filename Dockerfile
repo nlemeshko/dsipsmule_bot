@@ -21,6 +21,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Копируем исходники
 COPY . /app
+RUN chown -R 10001:10001 /app/data
 
 # Задаем переменные окружения (могут перекрываться при запуске)
 # ENV BOT_TOKEN="" \
@@ -30,4 +31,5 @@ COPY . /app
 #     CHARACTER_VOICE_ID=""
 
 # Запуск
+EXPOSE 8080
 CMD ["python", "bot.py"]

@@ -15,6 +15,11 @@ from telegram.constants import ParseMode
 logger = logging.getLogger(__name__)
 TELEGRAM_MEDIA_CAPTION_LIMIT = 1024
 
+
+def _delivery_bot(context):
+    """Moderation always reaches Telegram, including an admin using the Mini App."""
+    return getattr(context.bot, "delivery_bot", context.bot)
+
 # Получаем список админов из переменных окружения
 @lru_cache(maxsize=1)
 def get_admin_ids():
@@ -40,7 +45,7 @@ async def send_to_admins(context: ContextTypes.DEFAULT_TYPE, message: str, admin
     sent_count = 0
     for admin_id in admin_ids:
         try:
-            await context.bot.send_message(
+            await _delivery_bot(context).send_message(
                 chat_id=admin_id,
                 text=message,
                 parse_mode='HTML'
@@ -98,11 +103,11 @@ async def _send_photo_with_fallback(
     """Отправляет фото, а если подпись слишком длинная — фото и текст отдельными сообщениями."""
     normalized_caption = (caption or "").strip()
     if not normalized_caption:
-        await context.bot.send_photo(chat_id=admin_id, photo=photo)
+        await _delivery_bot(context).send_photo(chat_id=admin_id, photo=photo)
         return
 
     if len(normalized_caption) <= TELEGRAM_MEDIA_CAPTION_LIMIT:
-        await context.bot.send_photo(
+        await _delivery_bot(context).send_photo(
             chat_id=admin_id,
             photo=photo,
             caption=normalized_caption,
@@ -117,8 +122,8 @@ async def _send_photo_with_fallback(
         len(normalized_caption),
         TELEGRAM_MEDIA_CAPTION_LIMIT,
     )
-    await context.bot.send_photo(chat_id=admin_id, photo=photo)
-    await context.bot.send_message(
+    await _delivery_bot(context).send_photo(chat_id=admin_id, photo=photo)
+    await _delivery_bot(context).send_message(
         chat_id=admin_id,
         text=normalized_caption,
         parse_mode=ParseMode.HTML,
@@ -157,8 +162,8 @@ async def send_photo_url_to_admins(
             if "caption is too long" not in str(e).lower():
                 logger.exception("Ошибка отправки фотографии по URL админу %s: %s", admin_id, e)
                 continue
-            await context.bot.send_photo(chat_id=admin_id, photo=photo_url)
-            await context.bot.send_message(
+            await _delivery_bot(context).send_photo(chat_id=admin_id, photo=photo_url)
+            await _delivery_bot(context).send_message(
                 chat_id=admin_id,
                 text=caption,
                 parse_mode=ParseMode.HTML,
@@ -188,7 +193,7 @@ async def send_voice_to_admins(
     sent_count = 0
     for admin_id in admin_ids:
         try:
-            await context.bot.send_voice(
+            await _delivery_bot(context).send_voice(
                 chat_id=admin_id,
                 voice=voice_file_id,
                 caption=caption,
@@ -219,7 +224,7 @@ async def send_audio_to_admins(
     sent_count = 0
     for admin_id in admin_ids:
         try:
-            await context.bot.send_audio(
+            await _delivery_bot(context).send_audio(
                 chat_id=admin_id,
                 audio=audio_file_id,
                 caption=caption,
@@ -267,7 +272,7 @@ async def send_anon_with_photo(context: ContextTypes.DEFAULT_TYPE, user_info: st
     admin_ids = get_admin_ids()
     for admin_id in admin_ids:
         try:
-            await context.bot.send_photo(
+            await _delivery_bot(context).send_photo(
                 chat_id=admin_id,
                 photo=photo_file_id,
                 caption=message,
@@ -292,7 +297,7 @@ async def send_anon_with_voice(context: ContextTypes.DEFAULT_TYPE, user_info: st
     admin_ids = get_admin_ids()
     for admin_id in admin_ids:
         try:
-            await context.bot.send_voice(
+            await _delivery_bot(context).send_voice(
                 chat_id=admin_id,
                 voice=voice_file_id,
                 caption=message,

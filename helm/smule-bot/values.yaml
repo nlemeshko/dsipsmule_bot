@@ -37,16 +37,29 @@ securityContext:
   allowPrivilegeEscalation: false
 
 
+service:
+  port: 8080
+
 ingress:
-  enabled: false
-  className: ""
-  annotations: {}
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod-dns
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "21m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "180"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "180"
   hosts:
-    - host: smule-bot.local
+    - host: bot.mdsn.work
       paths:
         - path: /
           pathType: Prefix
-  tls: []
+  tls:
+    - secretName: bot-mdsn-work-tls
+      hosts:
+        - bot.mdsn.work
 
 resources:
   limits:
@@ -79,6 +92,10 @@ env:
   CHARACTER_ID: ""
   CHARACTER_VOICE_ID: ""
   TZ: "Europe/Kyiv"
+  MINI_APP_URL: "https://bot.mdsn.work"
+  MINI_APP_HOST: "0.0.0.0"
+  MINI_APP_PORT: "8080"
+  MINI_APP_AUTH_MAX_AGE: "3600"
 
 # Persistent Volume settings
 persistence:

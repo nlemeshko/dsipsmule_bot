@@ -2,6 +2,25 @@
 
 Этот Helm чарт разворачивает Telegram smule-bot в Kubernetes кластере.
 
+Мини-приложение доступно через Ingress `bot.mdsn.work` → Service → HTTP-порт 8080.
+В том же контейнере работает polling Telegram. Используйте одну реплику.
+
+Ingress настроен по конфигурации кластера: `ingressClassName: nginx`, issuer
+`letsencrypt-prod-dns`, принудительные HTTPS-редиректы. Cert-manager создаёт
+сертификат для `bot.mdsn.work` в Secret `bot-mdsn-work-tls` в namespace релиза.
+DNS домена должен указывать на ваш Nginx ingress-контроллер. Service и backend
+Ingress используют порт 8080; контейнер слушает этот же порт.
+
+Для фото и аудио задан `proxy-body-size: 21m`, для ответов AI —
+`proxy-read-timeout: 180` и `proxy-send-timeout: 180`.
+Readiness проверяет `/healthz`. Переменные `MINI_APP_*` берутся из `env` в values,
+а `existingSecret.keys` может переопределить их. Токен и ключи API берутся из Secret `env`.
+
+Если зал славы должен переживать обновление Pod, включите `persistence.enabled`:
+CSV будет храниться в PVC (`DATA_DIR=/data`). Без PVC используется доступный для
+записи `emptyDir`: обновления CSV теряются при замене Pod. Первоначальные данные
+берутся из `data/hall.csv` в образе.
+
 ## Предварительные требования
 
 - Kubernetes 1.19+
@@ -22,19 +41,19 @@ cp values-example.yaml values.yaml
 
 ```yaml
 env:
-  TELEGRAM_TOKEN: "YOUR_TELEGRAM_BOT_TOKEN_HERE"
-  CHAT_ID: "YOUR_TELEGRAM_CHAT_ID_HERE"
-  SMULE_ACCOUNT_IDS: "96242367,3150102762"
+  MINI_APP_URL: "https://bot.mdsn.work"
+  MINI_APP_PORT: "8080"
+existingSecret:
+  name: env # Содержит BOT_TOKEN, ADMINS и ключи API
 ```
 
 ### 2. Установка чарта
 
 ```bash
 # Добавьте репозиторий (если необходимо)
-helm repo add smule-bot ./helm/smule-followers
 
 # Установите чарт
-helm install smule-bot ./helm/smule-followers -f ./helm/smule-followers/values.yaml
+helm install smule-bot ./helm/smule-bot -f ./helm/smule-bot/values.yaml
 ```
 
 ### 3. Проверка установки
@@ -47,7 +66,7 @@ kubectl get pods -l app.kubernetes.io/name=smule-bot
 kubectl logs -l app.kubernetes.io/name=smule-bot
 
 # Проверьте PersistentVolumeClaim
-kubeclt get pvc -l app.kubernetes.io/name=smule-bot
+kubectl get pvc -l app.kubernetes.io/name=smule-bot
 ```
 
 ## Конфигурация
@@ -69,7 +88,7 @@ kubeclt get pvc -l app.kubernetes.io/name=smule-bot
 ## Обновление
 
 ```bash
-helm upgrade smule-bot ./helm/smule-followers -f ./helm/smule-followers/values.yaml
+helm upgrade smule-bot ./helm/smule-bot -f ./helm/smule-bot/values.yaml
 ```
 
 ## Удаление
@@ -99,18 +118,18 @@ helm uninstall smule-bot
 ### Проверка логов
 
 ```bash
-kubectl logs -l app.kubernetes.io/name=smule-followers -f
+kubectl logs -l app.kubernetes.io/name=smule-bot -f
 ```
 
 ### Проверка переменных окружения
 
 ```bash
-kubectl describe pod -l app.kubernetes.io/name=smule-followers
+kubectl describe pod -l app.kubernetes.io/name=smule-bot
 ```
 
 ### Проверка PersistentVolume
 
 ```bash
-kubectl get pvc -l app.kubernetes.io/name=smule-followers
-kubectl describe pvc -l app.kubernetes.io/name=smule-followers
+kubectl get pvc -l app.kubernetes.io/name=smule-bot
+kubectl describe pvc -l app.kubernetes.io/name=smule-bot
 ```

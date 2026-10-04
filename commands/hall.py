@@ -5,15 +5,24 @@
 """
 
 import csv
+import os
 from datetime import datetime
+from pathlib import Path
 from telegram import Update
 from telegram.ext import ContextTypes
 from commands.common import build_binary_stream
 
+
+def hall_path():
+    return Path(os.getenv("DATA_DIR", str(Path(__file__).resolve().parent.parent / "data"))) / "hall.csv"
+
 # Загрузка данных зала славы/позора
 def load_hall_data():
     try:
-        with open('data/hall.csv', 'r', encoding='utf-8') as f:
+        path = hall_path()
+        if not path.exists() and os.getenv("DATA_DIR"):
+            path = Path(__file__).resolve().parent.parent / "data" / "hall.csv"
+        with path.open('r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             return list(reader)
     except FileNotFoundError:
@@ -21,7 +30,9 @@ def load_hall_data():
 
 # Сохранение данных зала славы/позора
 def save_hall_data(data):
-    with open('data/hall.csv', 'w', encoding='utf-8', newline='') as f:
+    path = hall_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open('w', encoding='utf-8', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=['category', 'name', 'nominated_by', 'date', 'votes'])
         writer.writeheader()
         writer.writerows(data)

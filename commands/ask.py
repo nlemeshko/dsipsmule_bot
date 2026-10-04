@@ -131,6 +131,10 @@ async def ask_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if client:
                 print("Закрываем сессию CharacterAI")
                 await client.close_session()
+            try:
+                await context.bot.delete_message(update.message.chat.id, thinking_msg.message_id)
+            except Exception:
+                pass
 
     except Exception as e:
         print(f"[CharacterAI Client Error] Ошибка при создании клиента CharacterAI: {str(e)}")

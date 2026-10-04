@@ -10,10 +10,13 @@ from telegram.ext import ContextTypes
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /help"""
     help_text = """
+🗡️ **Ведьмак · DSIP Smule**
+Официальный сайт: https://dsipsmule.one
+
 📋 **Доступные команды:**
 
 **Основные:**
-/start - запуск бота и кнопочное меню
+/start или /app - открыть мини-приложение
 /help - показать это сообщение
 
 **Развлечения:**
@@ -35,7 +38,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 /proof - подтвердить исполнение
 
 **В личных сообщениях:**
-- /start - показывает кнопочное меню с функциями
+- /start - показывает кнопку открытия мини-приложения
 - Бот отвечает на любые вопросы
 - Доступны все команды через кнопки
         """

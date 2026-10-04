@@ -7,7 +7,7 @@ Telegram бот для канала и группы
 import os
 import logging
 from dotenv import load_dotenv
-from telegram import Update
+from telegram import Update, MenuButtonWebApp, WebAppInfo
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
 # Импортируем команды из отдельных файлов
@@ -21,7 +21,9 @@ from commands.pole import pole_command, handle_pole_message
 from commands.roast_proof import roast_command, proof_command
 from commands.ask import ask_command
 from commands.callback_handler import handle_callback_query
-from commands.fsm_handler import handle_fsm_message, handle_anon_photo, handle_anon_voice, handle_fsm_audio
+from commands.fsm_handler import handle_fsm_message, handle_anon_photo, handle_anon_voice, handle_anon_audio
+from miniapp.auth import miniapp_url
+from miniapp.locks import locked_private
 
 # Загружаем переменные окружения
 load_dotenv()
@@ -45,14 +47,34 @@ if not BOT_TOKEN:
 
 class TelegramBot:
     def __init__(self):
-        self.application = Application.builder().token(BOT_TOKEN).build()
+        self.mini_app_url = miniapp_url(os.getenv('MINI_APP_URL', ''))
+        self.mini_app_server = None
+        self.application = (Application.builder().token(BOT_TOKEN)
+                            .post_init(self.post_init).post_stop(self.post_stop).build())
         self.setup_handlers()
+
+    async def post_init(self, application):
+        if self.mini_app_url:
+            from miniapp.server import MiniAppServer
+            self.mini_app_server = MiniAppServer(application, BOT_TOKEN)
+            await self.mini_app_server.start()
+            await application.bot.set_chat_menu_button(menu_button=MenuButtonWebApp(
+                text="Открыть приложение", web_app=WebAppInfo(self.mini_app_url),
+            ))
+            logger.info("Mini App: %s", self.mini_app_url)
+        else:
+            logger.warning("MINI_APP_URL не задан: используется прежнее меню бота")
+
+    async def post_stop(self, application):
+        if self.mini_app_server:
+            await self.mini_app_server.stop()
     
     def setup_handlers(self):
         """Настройка обработчиков команд и сообщений"""
         # Основные команды
         self.application.add_handler(CommandHandler("start", start_command))
         self.application.add_handler(CommandHandler("help", help_command))
+        self.application.add_handler(CommandHandler("app", start_command))
         
         # Команды развлечений
         self.application.add_handler(CommandHandler("prediction", prediction_command))
@@ -88,7 +110,7 @@ class TelegramBot:
         )
 
         self.application.add_handler(
-            MessageHandler(filters.ChatType.PRIVATE & filters.AUDIO, handle_fsm_audio)
+            MessageHandler(filters.ChatType.PRIVATE & filters.AUDIO, handle_anon_audio)
         )
         
         # Обработчик личных сообщений (только для private чатов, если не в FSM)
@@ -109,6 +131,9 @@ class TelegramBot:
         
         # Обработчик ошибок
         self.application.add_error_handler(self.error_handler)
+        for handlers in self.application.handlers.values():
+            for handler in handlers:
+                handler.callback = locked_private(handler.callback)
     
     async def log_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Логирование всех сообщений"""
