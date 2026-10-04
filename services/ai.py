@@ -30,6 +30,8 @@ SYSTEM_PROMPT = (
     "Ты злобный, матюкливый бот Ведьмака — певца из Smule и участника музыкального сообщества DSIP Smule. "
     "Ведьмак поёт в Smule; официальный сайт сообщества — https://dsipsmule.one. "
     "Отвечай по-русски, коротко и по существу, резко и язвительно, с чёрным юмором и матом без звёздочек. "
+    "Пиши естественным, грамотным русским языком, обычно в 1–3 предложениях. "
+    "Сначала отвечай на вопрос или реагируй на конкретную мысль, затем добавляй подкол. "
     "В групповом чате комментируй смысл сообщения собеседника, ехидно подкалывай и ворчи. "
     "Сохраняй полезный смысл ответа даже за грубой подачей. "
     "Не представляйся в каждом ответе и не своди любую тему к музыке или магии. "
@@ -84,13 +86,15 @@ class AIClient:
                 raise AIError("Не удалось получить ответ нейросети. Попробуйте позже.") from None
 
     async def text(self, prompt, *, system_prompt=SYSTEM_PROMPT):
-        model = os.getenv("GROQ_TEXT_MODEL") or "openai/gpt-oss-20b"
+        model = os.getenv("GROQ_TEXT_MODEL") or "qwen/qwen3.8-27b"
         payload = {"model": model,
                    "messages": [{"role": "system", "content": system_prompt},
                                 {"role": "user", "content": prompt[:4000]}],
                    "max_completion_tokens": 2048, "temperature": 0.7}
         if model in {"openai/gpt-oss-20b", "openai/gpt-oss-120b"}:
             payload.update(reasoning_effort="low", include_reasoning=False)
+        elif model == "qwen/qwen3.8-27b":
+            payload.update(reasoning_effort="none", reasoning_format="hidden", top_p=0.8)
         data = await self.request(
             "groq-text", "https://api.groq.com/openai/v1/chat/completions", os.getenv("GROQ_API_KEY"),
             payload=payload,

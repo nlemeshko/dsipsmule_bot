@@ -80,6 +80,8 @@ class TelegramBot:
     
     def setup_handlers(self):
         """Настройка обработчиков команд и сообщений"""
+        # Separate group: log every message before AI, FSM or games consume it.
+        self.application.add_handler(MessageHandler(filters.ALL, self.log_message), group=-2)
         # Основные команды
         self.application.add_handler(CommandHandler("start", start_command))
         self.application.add_handler(CommandHandler("help", help_command))
@@ -137,11 +139,6 @@ class TelegramBot:
         # Обработчик сообщений для игры Поле чудес (для групп и супергрупп)
         self.application.add_handler(
             MessageHandler((filters.ChatType.GROUP | filters.ChatType.SUPERGROUP) & filters.TEXT & ~filters.COMMAND, handle_pole_message)
-        )
-        
-        # Логирование всех сообщений (В КОНЦЕ, чтобы не перехватывать обработку)
-        self.application.add_handler(
-            MessageHandler(filters.ALL, self.log_message)
         )
         
         # Обработчик ошибок

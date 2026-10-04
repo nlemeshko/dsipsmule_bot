@@ -25,7 +25,9 @@ Readiness проверяет `/healthz`. Переменные `MINI_APP_*` бе�
 случайные комментарии. Обращения со слова «Бот» и ответы на сообщения самого бота
 обрабатываются независимо от вероятности. Лимиты API действуют во всех режимах.
 Модели по умолчанию:
-`openai/gpt-oss-20b`, `whisper-large-v3-turbo`, `@cf/black-forest-labs/flux-2-klein-4b`.
+`qwen/qwen3.8-27b`, `whisper-large-v3-turbo`, `@cf/black-forest-labs/flux-2-klein-4b`.
+Для текста Qwen работает в режиме диалога без внутренних рассуждений; запасной
+вариант настройки — `GROQ_TEXT_MODEL=openai/gpt-oss-120b` (переключение вручную).
 Для другой модели картинок задайте `CLOUDFLARE_IMAGE_MODEL` в Secret:
 `@cf/black-forest-labs/flux-2-klein-9b` или прежнюю `@cf/black-forest-labs/flux-1-schnell`.
 Klein 9B расходует около 1364 Neurons на 1024×1024: бесплатной дневной квоты хватит

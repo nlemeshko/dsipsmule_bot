@@ -16,15 +16,16 @@ TRANSCRIBE_STATE = "ai_waiting_audio"
 
 
 def sender_id(update):
-    """Identify chat senders without mistaking Telegram's placeholder user for a bot."""
+    """Identify anonymous admins and people posting as a channel in a group."""
     msg = update.message
     if not msg:
         return None
     if msg.sender_chat:
         if msg.chat.type in {"group", "supergroup"}:
-            if (msg.sender_chat.id == msg.chat_id
-                    and not getattr(msg, "is_automatic_forward", False)):
-                return msg.chat_id
+            if (not getattr(msg, "is_automatic_forward", False)
+                    and (msg.sender_chat.id == msg.chat_id
+                         or getattr(msg.sender_chat, "type", None) == "channel")):
+                return msg.sender_chat.id
         return None
     user = update.effective_user
     return user.id if user and not user.is_bot else None

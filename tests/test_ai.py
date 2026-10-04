@@ -42,6 +42,27 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         self.context = SimpleNamespace(bot_data={"ai_runtime": self.state},
                                        bot=SimpleNamespace(id=9001, get_file=AsyncMock()), args=[])
 
+    async def test_real_telegram_updates_from_all_group_sender_types(self):
+        from telegram import Update
+        users = [{"id": 101, "is_bot": False, "first_name": "Обычный участник"},
+                 {"id": 202, "is_bot": False, "first_name": "Другой участник"},
+                 {"id": 1087968824, "is_bot": True, "first_name": "Group"},
+                 {"id": 136817688, "is_bot": True, "first_name": "Channel"}]
+        senders = [None, None, {"id": -1001, "type": "supergroup", "title": "test"},
+                   {"id": -1002699357832, "type": "channel", "title": "Поющий ведьмак"}]
+        with patch.dict("os.environ", {"AI_REPLY_PROBABILITY": "1.0"}), patch("telegram.Message.reply_text", new_callable=AsyncMock) as reply:
+            for index, (user, sender) in enumerate(zip(users, senders)):
+                message = {"message_id": 80 + index, "date": int(time.time()),
+                           "chat": {"id": -1001, "type": "supergroup", "title": "test"},
+                           "from": user, "text": "Как дела?"}
+                if sender:
+                    message["sender_chat"] = sender
+                msg = Update.de_json({"update_id": index, "message": message}, None)
+                await group_message(msg, self.context)
+                await group_message(msg, self.context)
+        self.assertEqual(self.state.client.text.await_count, len(users))
+        self.assertEqual(reply.await_count, len(users))
+
     async def test_only_new_unedited_allowed_human_messages_reach_api(self):
         messages = [update(age=21), update(age=301), update(age=-30), update(chat_id=-999),
                     update(chat_type="channel"), update(text="/start"), update(text=None)]
@@ -236,6 +257,28 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.state.client.transcribe.await_count, 2)
         self.state.client.text.assert_not_called()
 
+    async def test_channel_text_and_direct_requests_in_allowed_group(self):
+        group_id, channel_id = -1004445297166, -1002699357832
+        sender = SimpleNamespace(id=channel_id, type="channel")
+        original = SimpleNamespace(from_user=SimpleNamespace(id=9001, is_bot=True), text="Ответ бота")
+        with patch.dict("os.environ", {"ALLOWED_GROUP_ID": str(group_id), "AI_REPLY_PROBABILITY": "0.1"}):
+            # Ordinary text is still randomly selected for a channel identity.
+            with patch("commands.ai.random.random", return_value=0):
+                msg = update(chat_id=group_id, sender_chat=sender)
+                msg.effective_user = SimpleNamespace(id=136817688, is_bot=True)
+                await group_message(msg, self.context)
+                msg.effective_message.reply_text.assert_awaited_once()
+            # Addressing and quoting work even when selection/cooldowns would skip.
+            with patch("commands.ai.random.random", return_value=0.99):
+                for index, (text, reply) in enumerate([("Бот как твои дела?", None), ("Почему?", original)]):
+                    msg = update(chat_id=group_id, message_id=20 + index, text=text,
+                                 sender_chat=sender, reply_to_message=reply)
+                    msg.effective_user = None
+                    await group_message(msg, self.context)
+                    await group_message(msg, self.context)
+                    msg.effective_message.reply_text.assert_awaited_once()
+        self.assertEqual(self.state.client.text.await_count, 3)
+
     async def test_every_group_voice_is_transcribed_regardless_of_sender_or_active_game(self):
         from commands.pole import pole_games
         pole_games[101] = {"chat_id": -1001}
@@ -271,7 +314,7 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         messages = [update(text=None, voice=voice, sender_chat=sender, age=21),
                     update(text=None, voice=voice, sender_chat=sender, chat_id=-999),
                     update(text=None, voice=voice, sender_chat=sender, chat_type="channel"),
-                    update(sender_chat=sender), edited]
+                    update(sender_chat=sender, is_automatic_forward=True), edited]
         with patch("commands.ai.random.random", return_value=0):
             for msg in messages:
                 await group_message(msg, self.context)
@@ -323,6 +366,23 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ProviderTests(unittest.IsolatedAsyncioTestCase):
+    async def test_default_qwen_uses_dialogue_mode_and_gpt_oss_override_still_works(self):
+        client = AIClient()
+        client.request = AsyncMock(return_value={"choices": [{"message": {"content": "Ответ по-русски"}}]})
+        with patch.dict("os.environ", {"GROQ_API_KEY": "offline", "GROQ_TEXT_MODEL": ""}):
+            self.assertEqual(await client.text("Бот, привет"), "Ответ по-русски")
+        payload = client.request.call_args.kwargs["payload"]
+        self.assertEqual(payload["model"], "qwen/qwen3.8-27b")
+        self.assertEqual(payload["reasoning_effort"], "none")
+        self.assertEqual(payload["reasoning_format"], "hidden")
+        self.assertNotIn("include_reasoning", payload)
+        with patch.dict("os.environ", {"GROQ_API_KEY": "offline", "GROQ_TEXT_MODEL": "openai/gpt-oss-120b"}):
+            await client.text("Вопрос")
+        payload = client.request.call_args.kwargs["payload"]
+        self.assertEqual(payload["reasoning_effort"], "low")
+        self.assertFalse(payload["include_reasoning"])
+        self.assertNotIn("reasoning_format", payload)
+
     async def test_groq_text_and_speech_request_formats(self):
         client = AIClient()
         client.request = AsyncMock(return_value={"choices": [{"message": {"content": "<think>тайна</think>Ответ"}}]})
