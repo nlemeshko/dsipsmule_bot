@@ -23,8 +23,6 @@ const catalog = {
     ["halllist", "🏆", "Зал славы и позора", "Посмотри, о ком говорит клуб.", "#382a1c"],
     ["hall", "✦", "Номинация", "Кто заслужил место в истории?", "#382a1c"],
     ["vote", "✓", "Голосование", "Поддержи своего номинанта.", "#382a1c"],
-    ["roast", "🔥", "Прожарка", "Для тех, кто умеет смеяться над собой.", "#382a1c"],
-    ["proof", "✔", "Подтверждение", "Геральт рассудит твоё утверждение.", "#382a1c"],
   ],
 
 };
@@ -32,8 +30,11 @@ const inputCommands = {
   ask: ["О чём спросим Геральта?", "Например: как перестать волноваться перед выступлением?"],
   hall: ["Имя номинанта", "Никнейм участника"],
   vote: ["Имя номинанта", "Никнейм из зала славы или позора"],
-  roast: ["Кого прожарить?", "Имя или текст сообщения (можно оставить пустым)"],
-  proof: ["Какое утверждение проверить?", "Напишите утверждение (можно оставить пустым)"],
+};
+const featureImages = {
+  anon: "anon.png", song: "sing.png", rate: "rate.png", promo: "piar.png", ask: "ask.png",
+  prediction: "prediction.png", pole: "pole.png", casino: "casino.png", halllist: "halllist.png",
+  hall: "hall.png", vote: "vote.png", help: "help.png",
 };
 let current = null, data = {messages: []}, pending = false, authenticated = false;
 const blobs = new Map();
@@ -78,6 +79,15 @@ async function mediaURL(key) {
   }).catch(error => { mediaJobs.delete(key); throw error; }));
   return mediaJobs.get(key);
 }
+function renderFeatureImage(force = false) {
+  const image = $("feature-image"), filename = featureImages[current?.[0]];
+  const hasPhoto = data.messages.some(m => m.kind === "photo" && (m.media || m.url));
+  image.hidden = !filename || (hasPhoto && !force);
+  if (filename) {
+    image.src = `/assets/${filename}`; image.alt = current[2];
+    image.onerror = () => { image.hidden = true; };
+  } else image.removeAttribute("src");
+}
 function renderMessages() {
   const activeMedia = new Set(data.messages.map(m => m.media).filter(Boolean));
   for (const [key, url] of blobs) if (!activeMedia.has(key)) { URL.revokeObjectURL(url); blobs.delete(key); }
@@ -88,8 +98,18 @@ function renderMessages() {
     if (message.media || message.url) {
       const media = document.createElement(message.kind === "photo" ? "img" : "audio");
       if (message.kind === "photo") { media.alt = "Изображение от бота"; media.loading = "lazy"; } else media.controls = true;
+      const unavailable = () => {
+        if (!card.isConnected) return;
+        media.remove(); const note = document.createElement("small");
+        note.textContent = message.kind === "photo" ? "Не удалось загрузить изображение." : "Не удалось загрузить аудио.";
+        card.prepend(note); if (message.kind === "photo") renderFeatureImage(true);
+      };
+      media.addEventListener("error", unavailable, {once: true});
       if (message.url && safeURL(message.url)) media.src = safeURL(message.url);
-      else if (message.media) mediaURL(message.media).then(url => { if (media.isConnected) media.src = url; }).catch(() => { media.remove(); const note = document.createElement("small"); note.textContent = "Вложение недоступно. Оно хранится 30 минут."; card.prepend(note); });
+      else if (message.media) mediaURL(message.media).then(url => {
+        if (media.isConnected) media.src = url;
+        else if (!data.messages.some(m => m.media === message.media)) { URL.revokeObjectURL(url); blobs.delete(message.media); }
+      }).catch(unavailable);
       card.append(media);
     }
     if (message.text) { const p = document.createElement("p"); textContent(p, message.text, message.parse_mode); card.append(p); }
@@ -105,6 +125,7 @@ function renderMessages() {
       } card.append(row);
     } $("messages").append(card);
   }
+  renderFeatureImage();
   updateComposer();
 }
 function updateComposer() {
@@ -129,12 +150,14 @@ function showWorkspace(item) {
   current = item; $("home").hidden = true; $("workspace").hidden = false;
   $("workspace-title").textContent = item[2]; $("workspace-description").textContent = item[3];
   const input = inputCommands[item[0]];
-  if (input) { $("command-label").textContent = input[0]; $("command-text").placeholder = input[1]; $("command-text").value = ""; $("command-text").required = !["roast", "proof"].includes(item[0]); }
+  if (input) { $("command-label").textContent = input[0]; $("command-text").placeholder = input[1]; $("command-text").value = ""; $("command-text").required = true; }
   $("category").hidden = !["hall", "vote"].includes(item[0]);
   tg?.BackButton?.show(); window.scrollTo({top: 0}); renderMessages();
 }
 async function openItem(item) {
   if (pending) return;
+  data = {...data, messages: [], state: null, playing: false};
+  $("message-text").value = ""; $("file").value = ""; notice("");
   showWorkspace(item);
   if (!inputCommands[item[0]]) await perform(item[5] ? {action: "callback", callback: item[5]} : {action: "command", command: item[0]});
 }
@@ -142,6 +165,7 @@ async function perform(body, file = null) {
   if (pending) return false;
   if (!authenticated) { notice("Откройте приложение кнопкой в чате с ботом, чтобы пользоваться функциями."); return false; }
   pending = true; $("busy").hidden = false; notice("");
+  data = {...data, messages: []}; renderMessages();
   document.querySelectorAll("button").forEach(b => b.disabled = true);
   try {
     const requestId = crypto.randomUUID();
@@ -168,8 +192,7 @@ for (const [section, items] of Object.entries(catalog)) for (const item of items
 $("command-form").addEventListener("submit", async event => {
   event.preventDefault(); let text = $("command-text").value.trim(); const command = current[0];
   if (["hall", "vote"].includes(command)) text = `${$("category").value} ${text}`;
-  const target = ["roast", "proof"].includes(command) ? text : "";
-  await perform({action: "command", command, text: target ? "" : text, target});
+  await perform({action: "command", command, text});
 });
 $("composer").addEventListener("submit", async event => {
   event.preventDefault(); const file = !$("attachments").hidden ? $("file").files[0] : null;

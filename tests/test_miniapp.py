@@ -99,17 +99,69 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         r = await self.client.get(f"/api/media/{media}", headers={"X-Telegram-Init-Data": signed(202)})
         self.assertEqual(r.status, 404)
 
-    async def test_prediction_and_roast_reply_context(self):
+    async def test_prediction_and_app_help(self):
         data = await self.action(action="command", command="prediction")
         self.assertTrue(data["messages"])
-        data = await self.action(action="command", command="roast", target="Исполнитель")
-        self.assertIn("Исполнитель", data["messages"][-1]["text"])
+        data = await self.action(action="command", command="help")
+        self.assertNotIn("/roast", data["messages"][-1]["text"])
+        self.assertNotIn("/proof", data["messages"][-1]["text"])
+
+    async def test_new_actions_replace_results_without_resetting_the_current_step(self):
+        first = await self.action(action="callback", callback="button1")
+        first_ids = {m["id"] for m in first["messages"]}
+        second = await self.action(action="callback", callback="button2")
+        self.assertEqual(second["state"], "song_waiting_text")
+        self.assertFalse(first_ids & {m["id"] for m in second["messages"]})
+        with patch("commands.admin_notifications.get_admin_ids", return_value=[999]):
+            submitted = await self.action(action="message", text="Новая песня", request_id="submit-once")
+            self.assertIsNone(submitted["state"])
+            self.assertFalse(any(m.get("media") for m in submitted["messages"]))
+            self.assertIn("отправлена администраторам", submitted["messages"][-1]["text"])
+            count = self.bot.send_message.await_count
+            duplicate = await self.action(action="message", text="Новая песня", request_id="submit-once")
+            self.assertEqual(duplicate["messages"], submitted["messages"])
+            self.assertEqual(self.bot.send_message.await_count, count)
+        self.server.session(101).last_action = 0
+        invalid = await self.client.post("/api/action", headers=self.headers, json={
+            "action": "command", "command": "hall", "request_id": "invalid-input", "text": "",
+        })
+        self.assertEqual(invalid.status, 400)
+        restored = await (await self.client.get("/api/bootstrap", headers=self.headers)).json()
+        self.assertEqual(restored["messages"], submitted["messages"])
+        latest = await self.action(action="command", command="help")
+        self.assertEqual(len(latest["messages"]), 1)
+        restored = await (await self.client.get("/api/bootstrap", headers=self.headers)).json()
+        self.assertEqual(restored["messages"], latest["messages"])
+
+    async def test_artwork_available_before_form_submission(self):
+        from miniapp.server import ARTWORK_NAMES
+        for name in ARTWORK_NAMES:
+            with self.subTest(name=name):
+                response = await self.client.get(f"/assets/{name}")
+                self.assertEqual(response.status, 200)
+                self.assertEqual(response.content_type, "image/png")
+                self.assertTrue((await response.read()).startswith(b"\x89PNG\r\n\x1a\n"))
+        for name in [".env", "bot.py", "missing.png"]:
+            self.assertEqual((await self.client.get(f"/assets/{name}")).status, 404)
+
+    async def test_cover_urls_use_https_instead_of_telegram_file_lookup(self):
+        from miniapp.bridge import AppBot
+        session = self.server.session(101)
+        bot = AppBot(self.bot, {"id": 101, "first_name": "Тест"}, session, self.server.media)
+        for url in ["https://example.com/cover.jpg", "http://example.com/cover.jpg", "//example.com/cover.jpg"]:
+            with self.subTest(url=url):
+                await bot.send_photo(101, url, caption="Обложка")
+                self.assertEqual(session.history[-1]["url"], "https://example.com/cover.jpg")
+        self.bot.get_file.assert_not_called()
 
     async def test_pole_game_and_reset(self):
         data = await self.action(action="command", command="pole")
         self.assertTrue(data["playing"])
         from commands.pole import pole_games
         word = pole_games[101]["word"]
+        resumed = await self.action(action="command", command="pole")
+        self.assertEqual(resumed["messages"], data["messages"])
+        self.assertEqual(pole_games[101]["word"], word)
         data = await self.action(action="message", text=word)
         self.assertFalse(data["playing"])
         self.assertIn("Поздравляем", data["messages"][-1]["text"])
@@ -215,7 +267,7 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         self.bot.get_file.assert_not_called()
 
     async def test_retired_actions_are_unavailable(self):
-        for action in [{"action": "command", "command": "retired_event"}, {"action": "callback", "callback": "retired_button"}]:
+        for action in [{"action": "command", "command": name} for name in ["retired_event", "roast", "proof"]] + [{"action": "callback", "callback": "retired_button"}]:
             self.server.session(101).last_action = 0
             r = await self.client.post("/api/action", headers=self.headers, json={**action, "request_id": "retired-request"})
             self.assertEqual(r.status, 400)
@@ -224,6 +276,7 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         html = await r.text()
         self.assertIn("Ведьмак", html)
         self.assertIn('href="https://dsipsmule.one"', html)
+        self.assertIn("Музыка.<br>Магия. Smule.", html)
         self.assertNotIn("Конкурс", html)
 
     async def test_menu_launcher_and_chat_user_share_a_lock(self):

@@ -42,8 +42,9 @@ class AppBot:
         message = self.message(text)
         entry = {"id": message.message_id, "text": text or "", "kind": kind or "text"}
         if media is not None:
-            if isinstance(media, str) and urlsplit(media).scheme == "https":
-                entry["url"] = media
+            if isinstance(media, str) and (urlsplit(media).scheme in {"https", "http"} or media.startswith("//")):
+                # Upstream cover URLs may use HTTP or omit the scheme. The app uses HTTPS.
+                entry["url"] = "https:" + media if media.startswith("//") else "https://" + media.split("://", 1)[1]
             else:
                 filename = getattr(media, "name", "")
                 if isinstance(media, str):

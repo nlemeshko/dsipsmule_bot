@@ -19,6 +19,10 @@ from miniapp.locks import user_lock
 
 logger = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "static"
+ARTWORK = STATIC.parent.parent / "images"
+ARTWORK_NAMES = {"anon.png", "ask.png", "casino.png", "hall.png", "halllist.png", "help.png",
+                 "piar.png", "pole.png", "prediction.png", "rate.png",
+                 "sing.png", "vote.png"}
 MAX_UPLOAD = 20 * 1024 * 1024
 PRIMARY_CALLBACKS = {"button1", "button2", "button3", "button4", "button6"}
 
@@ -70,15 +74,16 @@ def command_handlers():
     from commands.help import help_command
     from commands.pole import pole_command
     from commands.prediction import prediction_command
-    from commands.roast_proof import roast_command, proof_command
     async def chat_command(update, context):
         await update.effective_message.reply_text("Привет! Напиши сообщение — я на связи.")
 
+    async def app_help_command(update, context):
+        await help_command(update, context, miniapp=True)
+
     return dict(chat=chat_command, ask=ask_command, random=random_command, cat=cat_command, meme=meme_command,
                 casino=casino_command, hall=hall_command, halllist=halllist_command,
-                vote=vote_command, help=help_command,
-                pole=pole_command, prediction=prediction_command, roast=roast_command,
-                proof=proof_command)
+                vote=vote_command, help=app_help_command,
+                pole=pole_command, prediction=prediction_command)
 
 
 class MiniAppServer:
@@ -95,6 +100,7 @@ class MiniAppServer:
             web.get("/api/bootstrap", self.bootstrap), web.post("/api/action", self.action),
             web.post("/api/upload", self.upload), web.get("/api/media/{key}", self.media_response),
             web.get("/app.js", self.static), web.get("/styles.css", self.static),
+            web.get("/assets/{name}", self.artwork),
         ])
 
     @web.middleware
@@ -155,6 +161,12 @@ class MiniAppServer:
     async def static(self, request):
         return web.FileResponse(STATIC / request.path.lstrip("/"))
 
+    async def artwork(self, request):
+        name = request.match_info["name"]
+        if name not in ARTWORK_NAMES:
+            raise web.HTTPNotFound()
+        return web.FileResponse(ARTWORK / name)
+
     async def health(self, request):
         return web.json_response({"ok": True})
 
@@ -214,11 +226,10 @@ class MiniAppServer:
 
         action = body.get("action")
         text = body.get("text", "")
-        target = body.get("target", "")
         request_id = body.get("request_id")
         if not isinstance(request_id, str) or not 8 <= len(request_id) <= 128:
             raise ValueError("Нет идентификатора действия")
-        if not isinstance(text, str) or len(text) > 4000 or not isinstance(target, str) or len(target) > 4000:
+        if not isinstance(text, str) or len(text) > 4000:
             raise ValueError("Текст должен быть не длиннее 4000 символов")
         if action not in {"command", "callback", "message", "reset"}:
             raise ValueError("Неизвестное действие")
@@ -231,6 +242,7 @@ class MiniAppServer:
             bot = AppBot(self.application.bot, user, session, self.media)
             context = AppContext(self.application, bot, user["id"])
             attachment = None
+            user_entry = None
             if upload:
                 kind, stream = upload
                 state = user_states.get(user["id"])
@@ -256,7 +268,7 @@ class MiniAppServer:
                 user_states.pop(user["id"], None)
                 if command != "pole" and pole_games.get(user["id"], {}).get("chat_id") == user["id"]:
                     pole_games.pop(user["id"], None)
-                update = make_update(bot, f"/{command} {text}".strip(), target=target)
+                update = make_update(bot, f"/{command} {text}".strip())
                 context.args = text.split()
                 handler = self.commands[command]
                 if command == "pole" and pole_games.get(user["id"], {}).get("chat_id") == user["id"]:
@@ -283,8 +295,7 @@ class MiniAppServer:
                     raise ValueError("Введите текст или выберите файл")
                 update = make_update(bot, text, attachment=attachment)
                 if text and not attachment:
-                    session.history.append({"id": -update.effective_message.message_id, "kind": "text", "text": text, "author": "user"})
-                    session.history[:] = session.history[-60:]
+                    user_entry = {"id": -update.effective_message.message_id, "kind": "text", "text": text, "author": "user"}
                 if attachment:
                     handler = {"photo": handle_anon_photo, "voice": handle_anon_voice, "audio": handle_anon_audio}[upload[0]]
                 elif user_states.get(user["id"]):
@@ -293,6 +304,12 @@ class MiniAppServer:
                     handler = handle_pole_message
                 else:
                     handler = handle_personal_message
+            # Each accepted action replaces the visible result, retaining FSM/game state.
+            # Reopening an active game has no handler and keeps its current result.
+            if handler:
+                session.history.clear()
+            if user_entry:
+                session.history.append(user_entry)
             # Record before running side effects: transport retries never send moderation twice.
             session.requests[request_id] = True
             while len(session.requests) > 100:

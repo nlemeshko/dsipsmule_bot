@@ -7,7 +7,7 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE, *, miniapp=False):
     """Обработчик команды /help"""
     help_text = """
 🗡️ **Ведьмак · DSIP Smule**
@@ -33,13 +33,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 /halllist - посмотреть списки
 /vote [legend/cringe] [имя] - проголосовать
 
-**Критика и подтверждение:**
-/roast - получить критику исполнения
-/proof - подтвердить исполнение
-
 **В личных сообщениях:**
 - /start - показывает кнопку открытия мини-приложения
 - Бот отвечает на любые вопросы
 - Доступны все команды через кнопки
         """
+    if not miniapp:
+        help_text = help_text.replace("**В личных сообщениях:**", "**Критика и подтверждение:**\n/roast - получить критику исполнения\n/proof - подтвердить исполнение\n\n**В личных сообщениях:**")
     await update.message.reply_text(help_text, parse_mode='Markdown')
