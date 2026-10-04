@@ -16,15 +16,15 @@ TRANSCRIBE_STATE = "ai_waiting_audio"
 
 
 def sender_id(update):
-    """Anonymous admins use their group's identity, not Telegram's fake bot user."""
+    """Identify chat senders without mistaking Telegram's placeholder user for a bot."""
     msg = update.message
     if not msg:
         return None
     if msg.sender_chat:
-        if (msg.chat.type in {"group", "supergroup"}
-                and msg.sender_chat.id == msg.chat_id
-                and not getattr(msg, "is_automatic_forward", False)):
-            return msg.chat_id
+        if msg.chat.type in {"group", "supergroup"}:
+            if (msg.sender_chat.id == msg.chat_id
+                    and not getattr(msg, "is_automatic_forward", False)):
+                return msg.chat_id
         return None
     user = update.effective_user
     return user.id if user and not user.is_bot else None
@@ -40,7 +40,7 @@ class AIRuntime:
 
     def is_new(self, update):
         msg = update.message
-        return bool(msg and sender_id(update) is not None
+        return bool(msg
                     and msg.date.timestamp() > self.started_at
                     and 0 <= time.time() - msg.date.timestamp() < 300)
 
@@ -76,13 +76,36 @@ def allowed_group(chat_id):
     return str(chat_id) in re.split(r"[,\s]+", os.getenv("ALLOWED_GROUP_ID", "").strip())
 
 
+def reply_probability():
+    try:
+        value = float(os.getenv("AI_REPLY_PROBABILITY", "1.0"))
+        if 0 <= value <= 1:
+            return value
+    except ValueError:
+        pass
+    logger.warning("Invalid AI_REPLY_PROBABILITY; using 1.0")
+    return 1.0
+
+
+def replied_to_bot(message, bot):
+    original = message.reply_to_message
+    author = getattr(original, "from_user", None)
+    bot_id = getattr(bot, "id", None)
+    return bool(author and bot_id is not None and author.id == bot_id)
+
+
 def permitted(update, context):
     chat = update.effective_chat
     if not chat or (chat.type != "private" and not (chat.type in {"group", "supergroup"} and allowed_group(chat.id))):
         return False
     if getattr(context, "is_miniapp", False):
         return True
-    return runtime(context).is_new(update)
+    if not runtime(context).is_new(update):
+        return False
+    # Every new voice note in an allowed group is eligible, regardless of sender.
+    if chat.type in {"group", "supergroup"} and update.message.voice:
+        return True
+    return sender_id(update) is not None
 
 
 async def reply_text(message, text):
@@ -90,11 +113,11 @@ async def reply_text(message, text):
         await message.reply_text(text[offset:offset + 4000])
 
 
-async def answer(update, context, prompt, *, quiet=False):
+async def answer(update, context, prompt, *, quiet=False, rate_limit=True):
     if not permitted(update, context):
         return
     state = runtime(context)
-    if not state.throttle("text", sender_id(update), 5):
+    if rate_limit and not state.throttle("text", sender_id(update), 5):
         if not quiet:
             await update.effective_message.reply_text("Подождите 5 секунд перед следующим вопросом.")
         return
@@ -139,7 +162,9 @@ async def transcribe_bytes(update, context, content, filename):
     if not permitted(update, context):
         return
     state = runtime(context)
-    if not state.throttle("speech", sender_id(update), 5):
+    automatic_group_voice = (update.effective_chat.type in {"group", "supergroup"}
+                             and update.message and update.message.voice)
+    if not automatic_group_voice and not state.throttle("speech", sender_id(update), 5):
         await update.effective_message.reply_text("Подождите 5 секунд перед следующим аудио.")
         return
     try:
@@ -208,19 +233,40 @@ async def group_message(update, context):
     if update.effective_chat.type not in {"group", "supergroup"} or not os.getenv("GROQ_API_KEY") or not permitted(update, context):
         return
     msg = update.message
-    if not msg or not (msg.text or msg.voice) or (msg.text or "").startswith("/"):
+    if not msg or not (msg.text or msg.voice):
+        return
+    state = runtime(context)
+    # Voice transcription is independent of games, sender filters and random text replies.
+    if msg.voice:
+        if state.claim(msg.chat_id, msg.message_id):
+            await transcribe_message(update, context)
+        return
+    if (msg.text or "").startswith("/"):
+        return
+    replying = replied_to_bot(msg, context.bot)
+    direct = replying or bool(re.match(r"^\s*бот\b", msg.text, re.IGNORECASE))
+    if direct:
+        if not state.claim(msg.chat_id, msg.message_id):
+            return
+        prompt = msg.text
+        if replying:
+            original = msg.reply_to_message
+            quote = getattr(msg, "quote", None)
+            quoted_text = (getattr(quote, "text", None) or getattr(original, "text", None)
+                           or getattr(original, "caption", None))
+            if quoted_text:
+                prompt = ("Твоё предыдущее сообщение (цитата):\n" + quoted_text[:1200]
+                          + "\n\nНовое сообщение участника:\n" + msg.text)
+        await answer(update, context, prompt, rate_limit=False)
         return
     from commands.pole import pole_games
     if any(game.get("chat_id") == msg.chat_id for game in pole_games.values()):
         return
-    state = runtime(context)
     if not state.claim(msg.chat_id, msg.message_id):
         return
-    if msg.voice:
-        await transcribe_message(update, context)
+    probability = reply_probability()
+    if not msg.text or random.random() >= probability:
         return
-    if not msg.text or random.random() >= 0.10:
+    if probability < 1 and not state.throttle("text", msg.chat_id, 15, group=True):
         return
-    if not state.throttle("text", msg.chat_id, 15, group=True):
-        return
-    await answer(update, context, msg.text, quiet=True)
+    await answer(update, context, msg.text, quiet=True, rate_limit=probability < 1)

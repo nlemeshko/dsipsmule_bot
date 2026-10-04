@@ -19,7 +19,12 @@ Readiness проверяет `/healthz`. Переменные `MINI_APP_*` бе�
 Для бесплатных AI-функций добавьте в этот же Secret `GROQ_API_KEY`
 (текст и расшифровка), `CLOUDFLARE_API_TOKEN` и `CLOUDFLARE_ACCOUNT_ID`
 (картинки). Оставьте аккаунты Groq и Workers AI на бесплатных тарифах.
-Список групп задаётся `ALLOWED_GROUP_ID` через запятую. Модели по умолчанию:
+Список групп задаётся `ALLOWED_GROUP_ID` через запятую.
+Временно бот комментирует 100% новых обычных текстовых сообщений без пауз.
+Вернуть 10% можно через `AI_REPLY_PROBABILITY=0.1` в Secret `env`; `0` отключает
+случайные комментарии. Обращения со слова «Бот» и ответы на сообщения самого бота
+обрабатываются независимо от вероятности. Лимиты API действуют во всех режимах.
+Модели по умолчанию:
 `openai/gpt-oss-20b`, `whisper-large-v3-turbo`, `@cf/black-forest-labs/flux-2-klein-4b`.
 Для другой модели картинок задайте `CLOUDFLARE_IMAGE_MODEL` в Secret:
 `@cf/black-forest-labs/flux-2-klein-9b` или прежнюю `@cf/black-forest-labs/flux-1-schnell`.

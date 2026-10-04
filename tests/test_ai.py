@@ -31,14 +31,16 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         from commands.pole import pole_games
         user_states.clear()
         pole_games.clear()
-        self.env = patch.dict("os.environ", {"GROQ_API_KEY": "offline", "ALLOWED_GROUP_ID": "-1001, -1002"})
+        self.env = patch.dict("os.environ", {"GROQ_API_KEY": "offline", "ALLOWED_GROUP_ID": "-1001, -1002",
+                                             "AI_REPLY_PROBABILITY": "1.0"})
         self.env.start()
         self.addCleanup(self.env.stop)
         self.state = AIRuntime(started_at=time.time() - 20)
         self.state.client.text = AsyncMock(return_value="Ответ Ведьмака")
         self.state.client.transcribe = AsyncMock(return_value="Привет из голосового")
         self.state.client.image = AsyncMock(return_value=b"\xff\xd8\xffimage")
-        self.context = SimpleNamespace(bot_data={"ai_runtime": self.state}, bot=SimpleNamespace(get_file=AsyncMock()), args=[])
+        self.context = SimpleNamespace(bot_data={"ai_runtime": self.state},
+                                       bot=SimpleNamespace(id=9001, get_file=AsyncMock()), args=[])
 
     async def test_only_new_unedited_allowed_human_messages_reach_api(self):
         messages = [update(age=21), update(age=301), update(age=-30), update(chat_id=-999),
@@ -62,6 +64,9 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         fresh.effective_message.reply_text.assert_awaited_once_with("Ответ Ведьмака")
 
     async def test_ten_percent_threshold_and_duplicate_updates(self):
+        self.env10 = patch.dict("os.environ", {"AI_REPLY_PROBABILITY": "0.1"})
+        self.env10.start()
+        self.addCleanup(self.env10.stop)
         msg = update()
         with patch("commands.ai.random.random", return_value=0.10):
             await group_message(msg, self.context)
@@ -75,6 +80,9 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         self.state.client.text.assert_awaited_once()
 
     async def test_group_cooldown_and_active_game(self):
+        env10 = patch.dict("os.environ", {"AI_REPLY_PROBABILITY": "0.1"})
+        env10.start()
+        self.addCleanup(env10.stop)
         from commands.pole import pole_games
         pole_games[101] = {"chat_id": -1001}
         with patch("commands.ai.random.random", return_value=0):
@@ -84,6 +92,88 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
             await group_message(update(message_id=11), self.context)
             await group_message(update(message_id=12), self.context)
         self.state.client.text.assert_awaited_once()
+
+    async def test_full_probability_answers_consecutive_messages_once(self):
+        messages = [update(message_id=20, text="Первый пост"),
+                    update(message_id=21, text="Следующий пост"),
+                    update(message_id=22, text="Другой участник")]
+        messages[2].effective_user.id = 202
+        # The new default is 100% even without an explicit Secret setting.
+        with patch.dict("os.environ"):
+            import os
+            os.environ.pop("AI_REPLY_PROBABILITY", None)
+            with patch("commands.ai.random.random", return_value=0.999):
+                for msg in messages:
+                    await group_message(msg, self.context)
+                    await group_message(msg, self.context)
+                    msg.effective_message.reply_text.assert_awaited_once_with("Ответ Ведьмака")
+        self.assertEqual(self.state.client.text.await_count, 3)
+
+    async def test_zero_probability_disables_text_but_keeps_voice(self):
+        file = SimpleNamespace(file_path="voice.oga", download_as_bytearray=AsyncMock(return_value=b"ogg"))
+        self.context.bot.get_file.return_value = file
+        voice = update(message_id=21, text=None, voice=SimpleNamespace(file_id="file", file_size=3, duration=2))
+        with patch.dict("os.environ", {"AI_REPLY_PROBABILITY": "0"}), patch("commands.ai.random.random", return_value=0):
+            await group_message(update(), self.context)
+            await group_message(voice, self.context)
+        self.state.client.text.assert_not_called()
+        self.state.client.transcribe.assert_awaited_once_with(b"ogg", "voice.ogg")
+
+    async def test_bot_prefix_bypasses_probability_cooldowns_and_active_game(self):
+        from commands.pole import pole_games
+        pole_games[101] = {"chat_id": -1001}
+        self.state.throttle("text", -1001, 15, group=True)
+        self.state.throttle("text", 101, 5)
+        with patch.dict("os.environ", {"AI_REPLY_PROBABILITY": "0"}), patch("commands.ai.random.random", return_value=0.99):
+            for index, text in enumerate(["Бот, объясни", "бот помоги", "  БОТ!", "Бот"]):
+                msg = update(message_id=30 + index, text=text)
+                await group_message(msg, self.context)
+                await group_message(msg, self.context)
+                msg.effective_message.reply_text.assert_awaited_once_with("Ответ Ведьмака")
+            pole_games.clear()
+            for index, text in enumerate(["Ботинок", "Ботаника", "Привет, Бот"]):
+                await group_message(update(message_id=40 + index, text=text), self.context)
+        self.assertEqual(self.state.client.text.await_count, 4)
+
+    async def test_reply_to_this_bot_includes_quote_and_answers_once_at_zero_probability(self):
+        original = SimpleNamespace(from_user=SimpleNamespace(id=9001, is_bot=True),
+                                   text="Старый ответ бота", caption=None)
+        with patch.dict("os.environ", {"AI_REPLY_PROBABILITY": "0"}):
+            for index, quote in enumerate([None, SimpleNamespace(text="Выбранная цитата")]):
+                msg = update(message_id=50 + index, text="Почему?", reply_to_message=original, quote=quote)
+                await group_message(msg, self.context)
+                await group_message(msg, self.context)
+                expected = quote.text if quote else original.text
+                self.state.client.text.assert_awaited_with(
+                    "Твоё предыдущее сообщение (цитата):\n" + expected
+                    + "\n\nНовое сообщение участника:\nПочему?")
+                msg.effective_message.reply_text.assert_awaited_once()
+        self.assertEqual(self.state.client.text.await_count, 2)
+
+    async def test_replies_to_other_authors_and_plain_quotes_are_not_direct_requests(self):
+        with patch.dict("os.environ", {"AI_REPLY_PROBABILITY": "0"}):
+            for index, author in enumerate([SimpleNamespace(id=202, is_bot=False),
+                                            SimpleNamespace(id=9002, is_bot=True), None]):
+                original = SimpleNamespace(from_user=author, text="Бот, привет")
+                await group_message(update(message_id=60 + index, text="Почему?", reply_to_message=original), self.context)
+            await group_message(update(message_id=63, text="«Ответ бота»", quote=SimpleNamespace(text="Ответ бота")), self.context)
+        self.state.client.text.assert_not_called()
+
+    async def test_direct_requests_preserve_new_message_group_and_sender_checks(self):
+        original = SimpleNamespace(from_user=SimpleNamespace(id=9001, is_bot=True), text="Ответ")
+        messages = [update(age=21), update(age=301), update(chat_id=-999), update(chat_type="channel"),
+                    update(text="/start")]
+        edited = update()
+        edited.message = None
+        bot_message = update()
+        bot_message.effective_user.is_bot = True
+        messages.extend([edited, bot_message])
+        for msg in messages:
+            msg.effective_message.reply_to_message = original
+            if msg.effective_message.text != "/start":
+                msg.effective_message.text = "Бот, привет"
+            await group_message(msg, self.context)
+        self.state.client.text.assert_not_called()
 
     async def test_new_group_voice_is_transcribed_without_random_selection(self):
         file = SimpleNamespace(file_path="voice.oga", download_as_bytearray=AsyncMock(return_value=b"ogg"))
@@ -101,7 +191,7 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
             await group_message(msg, self.context)
         self.context.bot.get_file.assert_not_called()
 
-    async def test_anonymous_admin_voice_is_transcribed_once_using_the_group_identity(self):
+    async def test_anonymous_admin_voice_is_transcribed_once(self):
         group_id = -1004445297166
         file = SimpleNamespace(file_path="voice.oga", download_as_bytearray=AsyncMock(return_value=b"ogg"))
         self.context.bot.get_file.return_value = file
@@ -113,8 +203,6 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
             await group_message(msg, self.context)
         self.state.client.transcribe.assert_awaited_once_with(b"ogg", "voice.ogg")
         msg.effective_message.reply_text.assert_awaited_once_with("Расшифровка:\nПривет из голосового")
-        self.assertIn(("speech", group_id), self.state.users)
-        self.assertNotIn(("speech", 1087968824), self.state.users)
 
     async def test_anonymous_admin_text_keeps_new_only_group_and_probability_checks(self):
         anonymous = SimpleNamespace(id=-1001)
@@ -129,6 +217,67 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
             fresh.effective_user = None
             await group_message(fresh, self.context)
         self.state.client.text.assert_awaited_once_with("Привет")
+
+    async def test_channel_voice_in_allowed_group_is_transcribed_once(self):
+        group_id, channel_id = -1004445297166, -1002699357832
+        self.context.bot.get_file.return_value = SimpleNamespace(
+            file_path="voice.oga", download_as_bytearray=AsyncMock(return_value=b"ogg"))
+        voice = SimpleNamespace(file_id="file", file_size=3, duration=2)
+        with patch.dict("os.environ", {"ALLOWED_GROUP_ID": str(group_id)}):
+            for index, forwarded in enumerate([False, True]):
+                self.state.users.clear()
+                msg = update(chat_id=group_id, message_id=20 + index, text=None, voice=voice,
+                             sender_chat=SimpleNamespace(id=channel_id, type="channel"),
+                             is_automatic_forward=forwarded)
+                msg.effective_user = None
+                await group_message(msg, self.context)
+                await group_message(msg, self.context)
+                msg.effective_message.reply_text.assert_awaited_once_with("Расшифровка:\nПривет из голосового")
+        self.assertEqual(self.state.client.transcribe.await_count, 2)
+        self.state.client.text.assert_not_called()
+
+    async def test_every_group_voice_is_transcribed_regardless_of_sender_or_active_game(self):
+        from commands.pole import pole_games
+        pole_games[101] = {"chat_id": -1001}
+        self.context.bot.get_file.return_value = SimpleNamespace(
+            file_path="voice.oga", download_as_bytearray=AsyncMock(return_value=b"ogg"))
+        voice = SimpleNamespace(file_id="file", file_size=3, duration=2)
+        senders = [
+            (SimpleNamespace(id=101, is_bot=False), None),
+            (SimpleNamespace(id=101, is_bot=False), None),  # back-to-back voice notes
+            (SimpleNamespace(id=202, is_bot=False), None),
+            (SimpleNamespace(id=1087968824, is_bot=True), SimpleNamespace(id=-1001)),
+            (None, SimpleNamespace(id=-1002699357832, type="channel")),
+            (None, SimpleNamespace(id=-100999, type="supergroup")),
+            (SimpleNamespace(id=303, is_bot=True), None),
+            (None, None),
+        ]
+        with patch("commands.ai.random.random", return_value=0.99):
+            for index, (user, sender_chat) in enumerate(senders):
+                msg = update(message_id=100 + index, text=None, voice=voice,
+                             sender_chat=sender_chat, is_automatic_forward=True)
+                msg.effective_user = user
+                await group_message(msg, self.context)
+                await group_message(msg, self.context)
+                msg.effective_message.reply_text.assert_awaited_once_with("Расшифровка:\nПривет из голосового")
+        self.assertEqual(self.state.client.transcribe.await_count, len(senders))
+        self.state.client.text.assert_not_called()
+
+    async def test_channel_voice_keeps_age_edits_and_destination_group_checks(self):
+        voice = SimpleNamespace(file_id="file", file_size=3, duration=2)
+        sender = SimpleNamespace(id=-1002699357832, type="channel")
+        edited = update(text=None, voice=voice, sender_chat=sender)
+        edited.message = None
+        messages = [update(text=None, voice=voice, sender_chat=sender, age=21),
+                    update(text=None, voice=voice, sender_chat=sender, chat_id=-999),
+                    update(text=None, voice=voice, sender_chat=sender, chat_type="channel"),
+                    update(sender_chat=sender), edited]
+        with patch("commands.ai.random.random", return_value=0):
+            for msg in messages:
+                await group_message(msg, self.context)
+        self.context.bot.get_file.assert_not_called()
+        self.state.client.transcribe.assert_not_called()
+        self.state.client.text.assert_not_called()
 
     async def test_anonymous_audio_keeps_moderation_routing(self):
         from commands.callback_handler import user_states, ANON_STATE
