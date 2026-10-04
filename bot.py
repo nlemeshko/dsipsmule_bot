@@ -151,18 +151,32 @@ class TelegramBot:
                 handler.callback = locked_private(handler.callback)
     
     async def log_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Логирование всех сообщений"""
-        chat_type = update.effective_chat.type
+        """Log the real sender and media type, including messages without text."""
+        message, chat = update.effective_message, update.effective_chat
+        if not message or not chat:
+            return
+        media_types = {
+            "voice": "голосовое", "audio": "аудиофайл", "photo": "фото",
+            "video": "видео", "video_note": "видеосообщение", "animation": "анимация",
+            "document": "документ", "sticker": "стикер", "poll": "опрос",
+            "location": "геопозиция", "contact": "контакт", "dice": "кубик",
+        }
+        kind = "текст" if message.text is not None else next(
+            (label for field, label in media_types.items() if getattr(message, field, None)),
+            "служебное сообщение",
+        )
+        content = message.text or message.caption or f"[{kind}]"
+        sender_chat = message.sender_chat
         user = update.effective_user
-        message_text = update.message.text if update.message else "Нет текста"
-        
-        # Безопасная обработка пользователя
-        if user:
-            user_name = user.first_name or "Неизвестный"
-            username = user.username or "Нет username"
-            logger.info(f"Сообщение от {user_name} (@{username}) в {chat_type}: {message_text}")
+        if sender_chat:
+            sender = f"от имени чата {sender_chat.title or sender_chat.id} (sender_chat_id={sender_chat.id})"
+        elif user:
+            username = f" (@{user.username})" if user.username else ""
+            sender = f"от {user.first_name or 'Неизвестный'}{username}"
         else:
-            logger.info(f"Системное сообщение в {chat_type}: {message_text}")
+            sender = "без пользователя"
+        logger.info("Сообщение %s в %s (chat_id=%s, message_id=%s, тип=%s): %s",
+                    sender, chat.type, chat.id, message.message_id, kind, content)
     
     async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик ошибок"""
