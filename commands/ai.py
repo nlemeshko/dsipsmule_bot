@@ -231,7 +231,7 @@ async def private_audio(update, context):
 
 
 async def group_message(update, context):
-    if update.effective_chat.type not in {"group", "supergroup"} or not os.getenv("GROQ_API_KEY") or not permitted(update, context):
+    if update.effective_chat.type not in {"group", "supergroup"} or not permitted(update, context):
         return
     msg = update.message
     if not msg or not (msg.text or msg.voice):
@@ -239,10 +239,22 @@ async def group_message(update, context):
     state = runtime(context)
     # Voice transcription is independent of games, sender filters and random text replies.
     if msg.voice:
+        if not os.getenv("GROQ_API_KEY"):
+            return
         if state.claim(msg.chat_id, msg.message_id):
             await transcribe_message(update, context)
         return
     if (msg.text or "").startswith("/"):
+        return
+    from commands.word_commands import match_word_command, run_word_command
+    word_command = match_word_command(msg.text)
+    if word_command:
+        from telegram.ext import ApplicationHandlerStop
+        if state.claim(msg.chat_id, msg.message_id):
+            await run_word_command(update, context, word_command)
+        # Do not also comment with AI or treat the shortcut as a game guess.
+        raise ApplicationHandlerStop
+    if not os.getenv("GROQ_API_KEY"):
         return
     replying = replied_to_bot(msg, context.bot)
     direct = replying or bool(re.match(r"^\s*бот\b", msg.text, re.IGNORECASE))

@@ -30,6 +30,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE, *, mi
 /draw [описание] - нарисовать картинку
 /transcribe - расшифровать аудио (в группе ответьте на голосовое)
 
+**Словесные команды в разрешённых группах:**
+котик → /cat; судьба → /prediction; песня → /random; мем → /meme
+казино или бурмалда → /casino; слава → /halllist; пруф → /proof; лох → /roast
+Нарисуй [описание] → /draw
+
 **Зал славы/позора:**
 /hall [legend/cringe] [имя] - номинировать пользователя
 /halllist - посмотреть списки
@@ -42,6 +47,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE, *, mi
         """
     if miniapp:
         help_text = help_text.replace("/transcribe - расшифровать аудио (в группе ответьте на голосовое)\n", "")
+        help_text = help_text.replace(
+            "**Словесные команды в разрешённых группах:**\n"
+            "котик → /cat; судьба → /prediction; песня → /random; мем → /meme\n"
+            "казино или бурмалда → /casino; слава → /halllist; пруф → /proof; лох → /roast\n"
+            "Нарисуй [описание] → /draw\n", "")
     else:
         help_text = help_text.replace("**В личных сообщениях:**", "**Критика и подтверждение:**\n/roast - получить критику исполнения\n/proof - подтвердить исполнение\n\n**В личных сообщениях:**")
     await update.message.reply_text(help_text, parse_mode='Markdown')
