@@ -4,42 +4,19 @@
 Команды для зала славы/позора: /hall, /halllist, /vote
 """
 
-import csv
-import os
+import asyncio
+import logging
 from datetime import datetime
-from pathlib import Path
 from telegram import Update
 from telegram.ext import ContextTypes
 from commands.common import build_binary_stream
+from storage.hall import hall_path, load_hall_data, save_hall_data, update_hall_data
 
+logger = logging.getLogger(__name__)
 
-def hall_path():
-    return Path(os.getenv("DATA_DIR", str(Path(__file__).resolve().parent.parent / "data"))) / "hall.csv"
-
-# Загрузка данных зала славы/позора
-def load_hall_data():
-    try:
-        path = hall_path()
-        if not path.exists() and os.getenv("DATA_DIR"):
-            path = Path(__file__).resolve().parent.parent / "data" / "hall.csv"
-        with path.open('r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            return list(reader)
-    except FileNotFoundError:
-        return []
-
-# Сохранение данных зала славы/позора
-def save_hall_data(data):
-    path = hall_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open('w', encoding='utf-8', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=['category', 'name', 'nominated_by', 'date', 'votes'])
-        writer.writeheader()
-        writer.writerows(data)
 
 async def hall_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /hall"""
-    hall_data = load_hall_data()
     
     try:
         args = update.message.text.split(maxsplit=2)
@@ -55,23 +32,17 @@ async def hall_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         nominee = args[2]
         nominator = update.effective_user.username or f"id{update.effective_user.id}"
         
-        # Проверяем, не номинирован ли уже этот пользователь
-        for row in hall_data:
-            if row['name'] == nominee and row['category'] == category:
-                await update.message.reply_text(f"@{nominee} уже номинирован в эту категорию!")
-                return
-        
-        # Добавляем новую номинацию
-        new_nomination = {
-            "category": category,
-            "name": nominee,
-            "nominated_by": nominator,
-            "date": datetime.now().strftime("%Y-%m-%d"),
-            "votes": '1'
-        }
-        hall_data.append(new_nomination)
-        save_hall_data(hall_data)
-        
+        def nominate(rows):
+            if any(row['name'] == nominee and row['category'] == category for row in rows):
+                return False, False
+            rows.append({"category": category, "name": nominee, "nominated_by": nominator,
+                         "date": datetime.now().strftime("%Y-%m-%d"), "votes": '1'})
+            return True, True
+
+        if not await asyncio.to_thread(update_hall_data, nominate):
+            await update.message.reply_text(f"@{nominee} уже номинирован в эту категорию!")
+            return
+
         category_emoji = "🏆" if category == "legend" else "🤦"
         response_text = (
             f"{category_emoji} Новая номинация!\n"
@@ -96,16 +67,16 @@ async def hall_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"Номинация создана: {response_text}")
         
     except Exception as e:
-        print(f"Ошибка в команде /hall: {e}")
-        await update.message.reply_text(f"Произошла ошибка при обработке команды: {e}")
+        logger.error("Hall nomination failed: %s", type(e).__name__)
+        await update.message.reply_text("Не удалось сохранить номинацию. Попробуйте позже.")
 
 async def halllist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /halllist"""
-    hall_data = load_hall_data()
     
     try:
         print(f"Команда /halllist от {update.effective_user.username or update.effective_user.id}")
         
+        hall_data = await asyncio.to_thread(load_hall_data)
         legends = []
         cringe = []
         
@@ -138,12 +109,11 @@ async def halllist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"Список зала славы/позора отправлен: {response_text}")
         
     except Exception as e:
-        print(f"Ошибка в команде /halllist: {e}")
-        await update.message.reply_text(f"Произошла ошибка при получении списка: {e}")
+        logger.error("Hall listing failed: %s", type(e).__name__)
+        await update.message.reply_text("Не удалось загрузить зал славы. Попробуйте позже.")
 
 async def vote_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /vote"""
-    hall_data = load_hall_data()
     
     try:
         args = update.message.text.split(maxsplit=2)
@@ -157,21 +127,17 @@ async def vote_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         nominee = args[2]
-        # Ищем номинацию
-        found = False
-        for row in hall_data:
-            if row['name'] == nominee and row['category'] == category:
-                row['votes'] = str(int(row['votes']) + 1)
-                found = True
-                break
-        
-        if not found:
+        def vote(rows):
+            for row in rows:
+                if row['name'] == nominee and row['category'] == category:
+                    row['votes'] = str(int(row['votes']) + 1)
+                    return True, True
+            return False, False
+
+        if not await asyncio.to_thread(update_hall_data, vote):
             await update.message.reply_text(f"Номинация для @{nominee} в категории {category} не найдена!")
             return
-        
-        # Сохраняем обновленные данные
-        save_hall_data(hall_data)
-        
+
         category_emoji = "🏆" if category == "legend" else "🤦"
         response_text = f"{category_emoji} Ваш голос за @{nominee} учтен!"
 
@@ -186,5 +152,5 @@ async def vote_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(response_text)
 
     except Exception as e:
-        print(f"Ошибка в команде /vote: {e}")
-        await update.message.reply_text(f"Произошла ошибка при голосовании: {e}")
+        logger.error("Hall vote failed: %s", type(e).__name__)
+        await update.message.reply_text("Не удалось сохранить голос. Попробуйте позже.")

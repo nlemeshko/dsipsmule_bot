@@ -5,6 +5,7 @@ Telegram бот для канала и группы
 """
 
 import os
+import asyncio
 import logging
 from dotenv import load_dotenv
 from telegram import Update, MenuButtonWebApp, WebAppInfo
@@ -54,6 +55,11 @@ class TelegramBot:
         self.setup_handlers()
 
     async def post_init(self, application):
+        from storage.hall import initialize_hall_storage
+        try:
+            await asyncio.to_thread(initialize_hall_storage)
+        except Exception as exc:
+            logger.error("Hall storage initialization failed: %s", type(exc).__name__)
         if self.mini_app_url:
             from miniapp.server import MiniAppServer
             self.mini_app_server = MiniAppServer(application, BOT_TOKEN)

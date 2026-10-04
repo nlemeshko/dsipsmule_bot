@@ -1,4 +1,15 @@
-{{- $appEnv := mergeOverwrite (dict "MINI_APP_URL" .Values.env.MINI_APP_URL "MINI_APP_HOST" .Values.env.MINI_APP_HOST "MINI_APP_PORT" .Values.env.MINI_APP_PORT "MINI_APP_AUTH_MAX_AGE" .Values.env.MINI_APP_AUTH_MAX_AGE "DATA_DIR" (.Values.env.DATA_DIR | default "/data")) (deepCopy .Values.existingSecret.keys) -}}
+{{- $defaults := dict
+  "MINI_APP_URL" .Values.env.MINI_APP_URL
+  "MINI_APP_HOST" .Values.env.MINI_APP_HOST
+  "MINI_APP_PORT" .Values.env.MINI_APP_PORT
+  "MINI_APP_AUTH_MAX_AGE" .Values.env.MINI_APP_AUTH_MAX_AGE
+  "DATA_DIR" (.Values.env.DATA_DIR | default "/data")
+  "S3_ENDPOINT_URL" .Values.env.S3_ENDPOINT_URL
+  "S3_REGION" .Values.env.S3_REGION
+  "S3_BUCKET" .Values.env.S3_BUCKET
+  "HALL_S3_KEY" .Values.env.HALL_S3_KEY
+-}}
+{{- $appEnv := mergeOverwrite $defaults (deepCopy .Values.existingSecret.keys) -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -6,6 +17,9 @@ metadata:
   labels:
     {{- include "smule-bot.labels" . | nindent 4 }}
 spec:
+  # One polling bot / CSV writer at a time, including during upgrades.
+  strategy:
+    type: Recreate
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:

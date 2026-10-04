@@ -7,12 +7,17 @@
 import asyncio
 import os
 import time
-import random
+import logging
 import requests
 from telegram import Update, CallbackQuery
 from telegram.ext import ContextTypes
 from commands.common import build_binary_stream
 from commands.entertainment import get_random_russian_song
+from commands.music import smule_song, song_message
+
+logger = logging.getLogger(__name__)
+_smule_retry_at = 0
+_smule_source = None
 # FSM состояния
 ANON_STATE = 'anon_waiting_text'
 SONG_STATE = 'song_waiting_text'
@@ -35,6 +40,7 @@ async def send_cached_photo_or_message(context, chat_id: int, image_path: str, r
 
 
 def fetch_song_of_the_day():
+    global _smule_retry_at, _smule_source
     smule_performances_url = os.getenv('SMULE_PERFORMANCES_URL', '').strip()
     smule_account_id = os.getenv('SMULE_ACCOUNT_ID', '').strip()
     default_account_id = smule_account_id or '96242367'
@@ -65,12 +71,23 @@ def fetch_song_of_the_day():
     if '_hot_dsip/performances/json' in request_url:
         request_url = default_smule_api_url
 
-    session = requests.Session()
-    session.headers.update(headers)
-    session.cookies.set('app', 'sing', domain='www.smule.com')
-    resp = session.get(request_url, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
+    if request_url != _smule_source:
+        _smule_retry_at, _smule_source = 0, request_url
+    if time.monotonic() < _smule_retry_at:
+        raise RuntimeError('Smule temporarily unavailable')
+    try:
+        with requests.Session() as session:
+            session.headers.update(headers)
+            session.cookies.set('app', 'sing', domain='www.smule.com')
+            resp = session.get(request_url, timeout=(3, 6))
+            resp.raise_for_status()
+            data = resp.json()
+            if not isinstance(data, dict):
+                raise ValueError('Invalid Smule response')
+            return data
+    except (requests.RequestException, ValueError):
+        _smule_retry_at = time.monotonic() + 60
+        raise
 
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик callback'ов от кнопок"""
@@ -130,39 +147,23 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         
         try:
             data = await asyncio.to_thread(fetch_song_of_the_day)
-            songs = data.get('list', [])
-            if not songs:
-                raise RuntimeError("Smule не вернул список песен")
-            song = random.choice(songs)
-            title = song.get('title', 'Без названия')
-            artist = song.get('artist', '')
-            web_url = song.get('web_url', '')
-            cover_url = song.get('cover_url', '')
-            song_url = web_url
-            if song_url and song_url.startswith('/'):
-                song_url = f"https://www.smule.com{song_url}"
-            msg = f"🎲 Песня дня:\n<b>{title}</b> — {artist}"
-            if song_url:
-                msg += f"\n{song_url}"
-            print(f"Песня дня для {user_id}: {title} — {artist}")
-            if cover_url:
-                await context.bot.send_photo(chat_id, cover_url, caption=msg, parse_mode='HTML')
-            else:
-                await context.bot.send_message(chat_id, msg, parse_mode='HTML')
-        except Exception as e:
-            print(f"Ошибка при получении песни дня: {e}")
-            fallback_title, fallback_artist, fallback_link = await asyncio.to_thread(get_random_russian_song)
-            if fallback_title:
-                fallback_msg = (
-                    f"🎲 Песня дня:\n<b>{fallback_title}</b> — {fallback_artist}\n{fallback_link}"
-                )
-                await context.bot.send_message(chat_id, fallback_msg, parse_mode='HTML')
-            else:
-                await context.bot.send_message(
-                    chat_id,
-                    "Не удалось получить песню дня ни из Smule, ни из резервного источника."
-                )
-            
+            title, artist, link, cover = smule_song(data)
+        except (requests.RequestException, ValueError, TypeError, AttributeError, RuntimeError) as exc:
+            logger.warning('Smule unavailable; using reserve music source (%s)', type(exc).__name__)
+            title, artist, link = await asyncio.to_thread(get_random_russian_song)
+            cover = ''
+        if not title:
+            await context.bot.send_message(chat_id, 'Не удалось подобрать песню. Попробуйте позже.')
+            return
+        msg = song_message('🎲 Песня дня:', title, artist, link)
+        if cover:
+            try:
+                await context.bot.send_photo(chat_id, cover, caption=msg, parse_mode='HTML')
+                return
+            except Exception as exc:
+                logger.warning('Song cover unavailable; sending the same song as text (%s)', type(exc).__name__)
+        await context.bot.send_message(chat_id, msg, parse_mode='HTML')
+
     elif query.data == "button6":
         # Промо
         user_states[user_id] = PROMOTE_STATE

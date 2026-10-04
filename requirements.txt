@@ -3,3 +3,4 @@ python-dotenv==1.0.0
 requests==2.31.0
 PyCharacterAI==2.2.46
 aiohttp==3.13.3
+boto3==1.43.108

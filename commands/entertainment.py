@@ -11,46 +11,13 @@ import requests
 from telegram import Update
 from telegram.ext import ContextTypes
 from commands.common import build_binary_stream
+from commands.music import get_random_russian_song, song_message
 
 # Словари для отслеживания времени последнего запроса по командам
 last_russong_time = {}
 last_cat_time = {}
 last_meme_time = {}
 last_casino_time = {}
-
-def get_random_russian_song():
-    """Получить случайную русскую песню с Last.fm"""
-    try:
-        # Используем предоставленный API ключ
-        lastfm_api_key = "b25b959554ed76058ac220b7b2e0a026"
-
-        # Используем метод tag.gettoptracks с тегом 'russian'
-        url = f"http://ws.audioscrobbler.com/2.0/?method=tag.gettoptracks&tag=russian&api_key={lastfm_api_key}&format=json&limit=100"
-        response = requests.get(url, timeout=10)
-        data = response.json()
-
-        if 'tracks' not in data or 'track' not in data['tracks']:
-            print("Не удалось получить данные от Last.fm API (tag.getTopTracks/russian)")
-            print(f"Ответ API: {data}")
-            return None, None, None
-
-        # Выбираем случайный трек из списка
-        tracks = data['tracks']['track']
-        if not tracks:
-            return None, None, None
-
-        track = random.choice(tracks)
-        title = track['name']
-        artist = track['artist']['name']
-        # Получаем ссылку на трек
-        track_url = track['url']
-
-        return title, artist, track_url
-
-    except Exception as e:
-        print(f"Ошибка при получении песни с Last.fm (tag.getTopTracks/russian): {e}")
-        return None, None, None
-
 
 def fetch_cat_image():
     """Получить случайное изображение котика."""
@@ -87,12 +54,7 @@ async def random_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Обновляем время последнего запроса
     last_russong_time[user_id] = now
         
-    response = (
-        f"🎵 Случайная песня:\n\n"
-        f"<b>{title}</b>\n"
-        f"Исполнитель: {artist}\n\n"
-        f"Ссылка на Last.fm:\n{link}"
-    )
+    response = song_message('🎵 Случайная песня:', title, artist, link)
     await update.message.reply_text(response, parse_mode='HTML')
 
 async def cat_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
