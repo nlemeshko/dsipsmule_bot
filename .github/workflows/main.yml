@@ -83,8 +83,15 @@ jobs:
           version: 'v1.28.0'
 
       - name: Configure kubectl for K3s
+        env:
+          K3S_KUBECONFIG_BASE64: ${{ secrets.K3S_KUBECONFIG }}
         run: |
-          echo "${{ secrets.K3S_KUBECONFIG }}" | base64 -d > kubeconfig
+          if [ -z "$K3S_KUBECONFIG_BASE64" ]; then
+            echo "::error::GitHub Actions secret K3S_KUBECONFIG is empty or unavailable."
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$K3S_KUBECONFIG_BASE64" | base64 -d > kubeconfig
           chmod 600 kubeconfig
           export KUBECONFIG=kubeconfig
           kubectl config set-context --current --namespace=default
@@ -92,28 +99,17 @@ jobs:
       - name: Check if secrets exist
         run: |
           export KUBECONFIG=kubeconfig
-          if ! kubectl get secret env -n smule-bot; then
-            echo "❌ Secret 'env' not found in namespace smule-bot"
-            echo "Please create the secret first:"
-            echo "kubectl create secret generic env \\"
-            echo "  --from-literal=TELEGRAM_TOKEN='your_token' \\"
-            echo "  --from-literal=CHAT_ID='your_chat_id' \\"
-            echo "  --from-literal=SMULE_ACCOUNT_IDS='96242367,3150102762' \\"
-            echo "  -n smule-bot"
-            exit 1
-          fi
-          
-          if ! kubectl get secret regcred -n smule-bot; then
-            echo "❌ Secret 'regcred' not found in namespace smule-bot"
-            echo "Please create the registry secret first:"
-            echo "kubectl create secret docker-registry regcred \\"
-            echo "  --docker-server=ghcr.io \\"
-            echo "  --docker-username=YOUR_GITHUB_USERNAME \\"
-            echo "  --docker-password=YOUR_GITHUB_TOKEN \\"
-            echo "  --docker-email=YOUR_EMAIL \\"
-            echo "  -n smule-bot"
-            exit 1
-          fi
+          for secret_name in env regcred; do
+            if ! secret_resource=$(kubectl get secret "$secret_name" -n smule-bot --ignore-not-found -o name --request-timeout=30s); then
+              echo "::error::Cannot check Secret '$secret_name'. See kubectl error above. Check K3S_KUBECONFIG credentials, API connectivity and access to namespace smule-bot."
+              exit 1
+            fi
+            if [ -z "$secret_resource" ]; then
+              echo "::error::Secret '$secret_name' not found in namespace smule-bot. Create it before deployment."
+              exit 1
+            fi
+            echo "✅ Found $secret_resource in namespace smule-bot"
+          done
 
       - name: Get latest tag
         id: get_tag

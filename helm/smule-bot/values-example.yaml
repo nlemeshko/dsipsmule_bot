@@ -28,7 +28,7 @@ env:
   CHARACTER_ID: ""
   CHARACTER_VOICE_ID: ""
   TZ: "Europe/Kyiv"
-  MINI_APP_URL: "https://bot.mdsn.work"
+  MINI_APP_URL: "https://bot.dsipsmule.one"
   MINI_APP_HOST: "0.0.0.0"
   MINI_APP_PORT: "8080"
   MINI_APP_AUTH_MAX_AGE: "3600"
@@ -48,14 +48,14 @@ ingress:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "180"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "180"
   hosts:
-    - host: bot.mdsn.work
+    - host: bot.dsipsmule.one
       paths:
         - path: /
           pathType: Prefix
   tls:
-    - secretName: bot-mdsn-work-tls
+    - secretName: bot-dsipsmule-one-tls
       hosts:
-        - bot.mdsn.work
+        - bot.dsipsmule.one
 
 
 # Настройки PersistentVolume

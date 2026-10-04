@@ -2,12 +2,12 @@
 
 Этот Helm чарт разворачивает Telegram smule-bot в Kubernetes кластере.
 
-Мини-приложение доступно через Ingress `bot.mdsn.work` → Service → HTTP-порт 8080.
+Мини-приложение доступно через Ingress `bot.dsipsmule.one` → Service → HTTP-порт 8080.
 В том же контейнере работает polling Telegram. Используйте одну реплику.
 
 Ingress настроен по конфигурации кластера: `ingressClassName: nginx`, issuer
 `letsencrypt-prod-dns`, принудительные HTTPS-редиректы. Cert-manager создаёт
-сертификат для `bot.mdsn.work` в Secret `bot-mdsn-work-tls` в namespace релиза.
+сертификат для `bot.dsipsmule.one` в Secret `bot-dsipsmule-one-tls` в namespace релиза.
 DNS домена должен указывать на ваш Nginx ingress-контроллер. Service и backend
 Ingress используют порт 8080; контейнер слушает этот же порт.
 
@@ -41,7 +41,7 @@ cp values-example.yaml values.yaml
 
 ```yaml
 env:
-  MINI_APP_URL: "https://bot.mdsn.work"
+  MINI_APP_URL: "https://bot.dsipsmule.one"
   MINI_APP_PORT: "8080"
 existingSecret:
   name: env # Содержит BOT_TOKEN, ADMINS и ключи API

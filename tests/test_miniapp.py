@@ -37,8 +37,8 @@ class AuthTests(unittest.TestCase):
                 validate_init_data(raw, TOKEN)
 
     def test_public_url_requires_https(self):
-        self.assertEqual(miniapp_url(" https://bot.mdsn.work "), "https://bot.mdsn.work")
-        for value in ["http://bot.mdsn.work", "https://user:pass@bot.mdsn.work", "https://", "https://bot.mdsn.work/#test"]:
+        self.assertEqual(miniapp_url(" https://bot.dsipsmule.one "), "https://bot.dsipsmule.one")
+        for value in ["http://bot.dsipsmule.one", "https://user:pass@bot.dsipsmule.one", "https://", "https://bot.dsipsmule.one/#test"]:
             with self.assertRaises(ValueError):
                 miniapp_url(value)
 
@@ -235,10 +235,10 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         bot = AppBot(self.bot, {"id": 101, "first_name": "Тест"}, session, self.server.media)
         update = make_update(bot, "/start")
         capture = AsyncMock()
-        with patch.dict("os.environ", {"MINI_APP_URL": "https://bot.mdsn.work"}), patch.object(AppBot, "send_message", capture):
+        with patch.dict("os.environ", {"MINI_APP_URL": "https://bot.dsipsmule.one"}), patch.object(AppBot, "send_message", capture):
             await locked_private(start_command)(update, AppContext(self.application, bot, 101))
         markup = capture.call_args.kwargs["reply_markup"]
-        self.assertEqual(markup.inline_keyboard[0][0].web_app.url, "https://bot.mdsn.work")
+        self.assertEqual(markup.inline_keyboard[0][0].web_app.url, "https://bot.dsipsmule.one")
         self.assertEqual(markup.inline_keyboard[1][0].url, "https://dsipsmule.one")
         self.assertIn("Ведьмак", capture.call_args.kwargs["text"])
 

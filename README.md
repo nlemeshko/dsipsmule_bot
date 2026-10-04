@@ -18,7 +18,7 @@
 ### Запуск мини-приложения
 
 ```env
-MINI_APP_URL=https://bot.mdsn.work
+MINI_APP_URL=https://bot.dsipsmule.one
 MINI_APP_HOST=0.0.0.0
 MINI_APP_PORT=8080
 MINI_APP_AUTH_MAX_AGE=3600
@@ -30,9 +30,9 @@ MINI_APP_AUTH_MAX_AGE=3600
 Токен бота и ключи API остаются на сервере. API проверяет подпись Telegram initData,
 срок сессии и владельца вложения. Через час приложение нужно переоткрыть.
 
-Helm уже содержит Service на 8080 и Ingress для `bot.mdsn.work`; TLS использует
-Secret `bot-mdsn-work-tls`. Настроены Nginx, ClusterIssuer `letsencrypt-prod-dns`
-и HTTPS-редиректы. Cert-manager создаёт сертификат для `bot.mdsn.work` по
+Helm уже содержит Service на 8080 и Ingress для `bot.dsipsmule.one`; TLS использует
+Secret `bot-dsipsmule-one-tls`. Настроены Nginx, ClusterIssuer `letsencrypt-prod-dns`
+и HTTPS-редиректы. Cert-manager создаёт сертификат для `bot.dsipsmule.one` по
 аннотации Ingress. DNS должен указывать на ваш ingress-контроллер. Для фото и
 аудио задан лимит 21 МБ, для голосовых ответов — таймауты 180 секунд.
 
