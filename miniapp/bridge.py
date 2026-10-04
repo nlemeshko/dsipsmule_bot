@@ -95,6 +95,8 @@ class AppBot:
 
 
 class AppContext:
+    is_miniapp = True
+
     def __init__(self, application, bot, user_id):
         self.bot = bot
         self.user_data = application.user_data[user_id]

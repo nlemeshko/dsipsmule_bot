@@ -7,6 +7,7 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 import random
+import os
 
 # Список ответов для личных сообщений
 PERSONAL_RESPONSES = [
@@ -40,6 +41,11 @@ async def handle_personal_message(update: Update, context: ContextTypes.DEFAULT_
         # Если игра активна, передаем управление обработчику игры
         from commands.pole import handle_pole_message
         await handle_pole_message(update, context)
+        return
+
+    if os.getenv("GROQ_API_KEY"):
+        from commands.ai import answer
+        await answer(update, context, msg.text)
         return
     
     # Простые ответы на основе ключевых слов

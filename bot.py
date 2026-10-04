@@ -21,8 +21,9 @@ from commands.entertainment import random_command, cat_command, meme_command, ca
 from commands.pole import pole_command, handle_pole_message
 from commands.roast_proof import roast_command, proof_command
 from commands.ask import ask_command
+from commands.ai import AIRuntime, draw_command, transcribe_command, private_audio, group_message
 from commands.callback_handler import handle_callback_query
-from commands.fsm_handler import handle_fsm_message, handle_anon_photo, handle_anon_voice, handle_anon_audio
+from commands.fsm_handler import handle_fsm_message, handle_anon_photo
 from miniapp.auth import miniapp_url
 from miniapp.locks import locked_private
 
@@ -52,6 +53,8 @@ class TelegramBot:
         self.mini_app_server = None
         self.application = (Application.builder().token(BOT_TOKEN)
                             .post_init(self.post_init).post_stop(self.post_stop).build())
+        # Mark the boundary before polling: queued messages from downtime are never AI inputs.
+        self.application.bot_data["ai_runtime"] = AIRuntime()
         self.setup_handlers()
 
     async def post_init(self, application):
@@ -95,6 +98,12 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("roast", roast_command))
         self.application.add_handler(CommandHandler("proof", proof_command))
         self.application.add_handler(CommandHandler("ask", ask_command))
+        self.application.add_handler(CommandHandler("draw", draw_command))
+        self.application.add_handler(CommandHandler("transcribe", transcribe_command))
+        # Before games handle (and possibly finish) a turn, so AI can skip active games.
+        self.application.add_handler(MessageHandler(
+            filters.ChatType.GROUPS & (filters.TEXT | filters.VOICE) & ~filters.COMMAND,
+            group_message), group=-1)
         
         # Обработчик callback'ов от кнопок
         self.application.add_handler(CallbackQueryHandler(handle_callback_query))
@@ -112,11 +121,11 @@ class TelegramBot:
         
         # Обработчик анонимных голосовых сообщений
         self.application.add_handler(
-            MessageHandler(filters.ChatType.PRIVATE & filters.VOICE, handle_anon_voice)
+            MessageHandler(filters.ChatType.PRIVATE & filters.VOICE, private_audio)
         )
 
         self.application.add_handler(
-            MessageHandler(filters.ChatType.PRIVATE & filters.AUDIO, handle_anon_audio)
+            MessageHandler(filters.ChatType.PRIVATE & filters.AUDIO, private_audio)
         )
         
         # Обработчик личных сообщений (только для private чатов, если не в FSM)

@@ -21,6 +21,11 @@ async def handle_fsm_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
         from commands.message_handler import handle_personal_message
         await handle_personal_message(update, context)
         return
+
+    from commands.ai import TRANSCRIBE_STATE
+    if user_states.get(user_id) == TRANSCRIBE_STATE:
+        await msg.reply_text("Пришлите голосовое или аудиофайл для расшифровки, либо выберите другую функцию.")
+        return
     
     # FSM: если пользователь пишет анонимку
     if user_states.get(user_id) == ANON_STATE:

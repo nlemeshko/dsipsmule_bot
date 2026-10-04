@@ -27,6 +27,14 @@ MAX_UPLOAD = 20 * 1024 * 1024
 PRIMARY_CALLBACKS = {"button1", "button2", "button3", "button4", "button6"}
 
 
+def app_state(user_id):
+    from commands.callback_handler import user_states
+    from commands.ai import TRANSCRIBE_STATE
+    state = user_states.get(user_id)
+    # Telegram-only conversations are not resumed inside the Mini App.
+    return None if state == TRANSCRIBE_STATE else state
+
+
 @dataclass
 class Session:
     history: list = field(default_factory=list)
@@ -69,6 +77,7 @@ class MediaStore:
 
 def command_handlers():
     from commands.ask import ask_command
+    from commands.ai import draw_command
     from commands.entertainment import random_command, cat_command, meme_command, casino_command
     from commands.hall import hall_command, halllist_command, vote_command
     from commands.help import help_command
@@ -80,7 +89,8 @@ def command_handlers():
     async def app_help_command(update, context):
         await help_command(update, context, miniapp=True)
 
-    return dict(chat=chat_command, ask=ask_command, random=random_command, cat=cat_command, meme=meme_command,
+    return dict(chat=chat_command, ask=ask_command, draw=draw_command,
+                random=random_command, cat=cat_command, meme=meme_command,
                 casino=casino_command, hall=hall_command, halllist=halllist_command,
                 vote=vote_command, help=app_help_command,
                 pole=pole_command, prediction=prediction_command)
@@ -148,11 +158,10 @@ class MiniAppServer:
         return session
 
     def result(self, user, session):
-        from commands.callback_handler import user_states
         from commands.pole import pole_games
         game = pole_games.get(user["id"], {})
         return {"user": {"first_name": user["first_name"], "username": user.get("username")},
-                "messages": session.history, "state": user_states.get(user["id"]),
+                "messages": session.history, "state": app_state(user["id"]),
                 "playing": game.get("chat_id") == user["id"]}
 
     async def index(self, request):
@@ -246,10 +255,7 @@ class MiniAppServer:
             if upload:
                 kind, stream = upload
                 state = user_states.get(user["id"])
-                accepted = {"photo": {ANON_STATE},
-                            "voice": {ANON_STATE},
-                            "audio": {ANON_STATE}}
-                if state not in accepted[kind]:
+                if state != ANON_STATE:
                     raise ValueError("В этом шаге вложение не требуется")
                 session.requests[request_id] = True
                 while len(session.requests) > 100:
@@ -263,7 +269,7 @@ class MiniAppServer:
                 command = body.get("command")
                 if not isinstance(command, str) or command not in self.commands:
                     raise ValueError("Неизвестная команда")
-                if command in {"ask", "hall", "vote"} and not text.strip():
+                if command in {"ask", "draw", "hall", "vote"} and not text.strip():
                     raise ValueError("Заполните поле")
                 user_states.pop(user["id"], None)
                 if command != "pole" and pole_games.get(user["id"], {}).get("chat_id") == user["id"]:
@@ -298,7 +304,7 @@ class MiniAppServer:
                     user_entry = {"id": -update.effective_message.message_id, "kind": "text", "text": text, "author": "user"}
                 if attachment:
                     handler = {"photo": handle_anon_photo, "voice": handle_anon_voice, "audio": handle_anon_audio}[upload[0]]
-                elif user_states.get(user["id"]):
+                elif app_state(user["id"]):
                     handler = handle_fsm_message
                 elif pole_games.get(user["id"], {}).get("chat_id") == user["id"]:
                     handler = handle_pole_message

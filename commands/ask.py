@@ -22,6 +22,16 @@ except ImportError:
 last_ask_time = {}
 
 async def ask_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from commands.ai import ask_command as groq_ask, permitted
+    if not permitted(update, context):
+        return
+    if os.getenv("GROQ_API_KEY") or not os.getenv("CHARACTER_AI_TOKEN"):
+        await groq_ask(update, context)
+    else:
+        await character_ask_command(update, context)
+
+
+async def character_ask_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /ask"""
     user_id = update.effective_user.id
     now = time.time()

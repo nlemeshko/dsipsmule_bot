@@ -1,0 +1,130 @@
+"""Groq text/speech and Cloudflare images, without provider SDKs or paid fallbacks."""
+
+import asyncio
+import base64
+import binascii
+import json
+import os
+import re
+import time
+
+import aiohttp
+
+MAX_AUDIO = 20 * 1024 * 1024
+SYSTEM_PROMPT = (
+    "Ты Ведьмак, дружелюбный бот музыкального сообщества DSIP Smule. "
+    "Отвечай по-русски, коротко и по существу, с лёгким юмором. "
+    "Не выдавай себя за человека, не оскорбляй участников. "
+    "Используй обычный текст без разметки. Не показывай внутренние рассуждения."
+)
+
+
+class AIError(Exception):
+    """Only safe, user-facing messages; never include upstream bodies or credentials."""
+
+
+class AIClient:
+    def __init__(self):
+        self.cooldowns = {}
+        self.slots = asyncio.Semaphore(3)
+
+    async def request(self, provider, url, token, *, payload=None, form=None):
+        if not token:
+            raise AIError("Нейросеть пока не подключена.")
+        async with self.slots:
+            if self.cooldowns.get(provider, 0) > time.monotonic():
+                raise AIError("Лимит нейросети исчерпан. Попробуйте позже.")
+            try:
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=90)) as session:
+                    async with session.post(url, headers={"Authorization": f"Bearer {token}"},
+                                            json=payload, data=form) as response:
+                        if response.status == 429:
+                            try:
+                                delay = float(response.headers.get("Retry-After", "60"))
+                            except ValueError:
+                                delay = 60
+                            self.cooldowns[provider] = time.monotonic() + max(60, min(delay, 86400))
+                            raise AIError("Лимит нейросети исчерпан. Попробуйте позже.")
+                        if response.status in {401, 403}:
+                            self.cooldowns[provider] = time.monotonic() + 60
+                            raise AIError("Нет доступа к нейросети. Администратору нужно проверить ключ и разрешения.")
+                        if response.status != 200:
+                            self.cooldowns[provider] = time.monotonic() + 30
+                            raise AIError("Нейросеть временно недоступна. Попробуйте позже.")
+                        raw = bytearray()
+                        async for chunk in response.content.iter_chunked(65536):
+                            raw.extend(chunk)
+                            if len(raw) > 16 * 1024 * 1024:
+                                raise AIError("Нейросеть вернула слишком большой ответ.")
+                        result = json.loads(raw)
+                        if not isinstance(result, dict):
+                            raise ValueError("response")
+                        return result
+            except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
+                self.cooldowns[provider] = time.monotonic() + 30
+                raise AIError("Не удалось получить ответ нейросети. Попробуйте позже.") from None
+
+    async def text(self, prompt):
+        model = os.getenv("GROQ_TEXT_MODEL") or "openai/gpt-oss-20b"
+        payload = {"model": model,
+                   "messages": [{"role": "system", "content": SYSTEM_PROMPT},
+                                {"role": "user", "content": prompt[:4000]}],
+                   "max_completion_tokens": 2048, "temperature": 0.7}
+        if model in {"openai/gpt-oss-20b", "openai/gpt-oss-120b"}:
+            payload.update(reasoning_effort="low", include_reasoning=False)
+        data = await self.request(
+            "groq-text", "https://api.groq.com/openai/v1/chat/completions", os.getenv("GROQ_API_KEY"),
+            payload=payload,
+        )
+        try:
+            text = data["choices"][0]["message"]["content"]
+            if not isinstance(text, str):
+                raise ValueError("text")
+            text = re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
+            if not text:
+                raise ValueError("empty")
+            return text
+        except (KeyError, IndexError, TypeError, ValueError):
+            raise AIError("Нейросеть не вернула текст. Попробуйте ещё раз.") from None
+
+    async def transcribe(self, content, filename="voice.ogg"):
+        if not content or len(content) > MAX_AUDIO:
+            raise AIError("Аудио должно быть не больше 20 МБ.")
+        if not os.getenv("GROQ_API_KEY"):
+            raise AIError("Расшифровка пока не подключена.")
+        if filename.lower().endswith(".oga"):
+            filename = filename[:-4] + ".ogg"
+        form = aiohttp.FormData()
+        form.add_field("model", os.getenv("GROQ_SPEECH_MODEL") or "whisper-large-v3-turbo")
+        form.add_field("response_format", "json")
+        form.add_field("temperature", "0")
+        form.add_field("file", content, filename=filename, content_type="application/octet-stream")
+        data = await self.request("groq-speech", "https://api.groq.com/openai/v1/audio/transcriptions",
+                                  os.getenv("GROQ_API_KEY"), form=form)
+        text = data.get("text")
+        if not isinstance(text, str) or not text.strip():
+            raise AIError("Не удалось разобрать речь в этом аудио.")
+        return text.strip()
+
+    async def image(self, prompt):
+        if not prompt.strip() or len(prompt) > 2048:
+            raise AIError("Описание картинки должно содержать от 1 до 2048 символов.")
+        account = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
+        if not re.fullmatch(r"[a-fA-F0-9]{32}", account):
+            raise AIError("Генерация картинок пока не подключена.")
+        data = await self.request(
+            "cloudflare-image",
+            f"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/black-forest-labs/flux-1-schnell",
+            os.getenv("CLOUDFLARE_API_TOKEN"), payload={"prompt": prompt, "steps": 4},
+        )
+        try:
+            if data.get("success") is not True:
+                raise ValueError("success")
+            content = base64.b64decode(data["result"]["image"], validate=True)
+            if not content or len(content) > 10 * 1024 * 1024:
+                raise ValueError("size")
+            if not (content.startswith(b"\xff\xd8\xff") or content.startswith(b"\x89PNG\r\n\x1a\n")):
+                raise ValueError("image")
+            return content
+        except (KeyError, TypeError, ValueError, binascii.Error):
+            raise AIError("Не удалось создать картинку. Проверьте лимит Workers AI и попробуйте позже.") from None

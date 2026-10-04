@@ -99,12 +99,43 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         r = await self.client.get(f"/api/media/{media}", headers={"X-Telegram-Init-Data": signed(202)})
         self.assertEqual(r.status, 404)
 
+    async def test_ai_text_and_images_use_app_results_and_do_not_send_private_copies(self):
+        from services.ai import AIClient
+        with patch.dict("os.environ", {"GROQ_API_KEY": "offline"}), patch.object(AIClient, "text", new=AsyncMock(return_value="Ответ нейросети")) as text:
+            data = await self.action(action="command", command="ask", text="Как спеть?")
+            self.assertEqual(data["messages"][-1]["text"], "Ответ нейросети")
+            text.assert_awaited_once_with("Как спеть?")
+        with patch.object(AIClient, "image", new=AsyncMock(return_value=b"\xff\xd8\xffJPEG")) as image:
+            data = await self.action(action="command", command="draw", text="Кот", request_id="draw-once")
+            photo = data["messages"][-1]
+            self.assertEqual(photo["kind"], "photo")
+            r = await self.client.get(f'/api/media/{photo["media"]}', headers=self.headers)
+            self.assertEqual(await r.read(), b"\xff\xd8\xffJPEG")
+            await self.action(action="command", command="draw", text="Кот", request_id="draw-once")
+            image.assert_awaited_once()
+        self.bot.send_audio.assert_not_called()
+        self.bot.send_photo.assert_not_called()
+        self.bot.get_file.assert_not_called()
+
+    async def test_ai_does_not_intercept_song_submission_or_active_game(self):
+        from services.ai import AIClient
+        with patch.dict("os.environ", {"GROQ_API_KEY": "offline"}), patch.object(AIClient, "text", new=AsyncMock()) as ai:
+            await self.action(action="callback", callback="button2")
+            with patch("commands.admin_notifications.get_admin_ids", return_value=[999]):
+                data = await self.action(action="message", text="Предложенная песня")
+                self.assertIn("администраторам", data["messages"][-1]["text"])
+            await self.action(action="command", command="pole")
+            from commands.pole import pole_games
+            await self.action(action="message", text=pole_games[101]["word"])
+            ai.assert_not_called()
+
     async def test_prediction_and_app_help(self):
         data = await self.action(action="command", command="prediction")
         self.assertTrue(data["messages"])
         data = await self.action(action="command", command="help")
         self.assertNotIn("/roast", data["messages"][-1]["text"])
         self.assertNotIn("/proof", data["messages"][-1]["text"])
+        self.assertNotIn("/transcribe", data["messages"][-1]["text"])
 
     async def test_new_actions_replace_results_without_resetting_the_current_step(self):
         first = await self.action(action="callback", callback="button1")
@@ -267,7 +298,7 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         self.bot.get_file.assert_not_called()
 
     async def test_retired_actions_are_unavailable(self):
-        for action in [{"action": "command", "command": name} for name in ["retired_event", "roast", "proof"]] + [{"action": "callback", "callback": "retired_button"}]:
+        for action in [{"action": "command", "command": name} for name in ["retired_event", "roast", "proof", "transcribe"]] + [{"action": "callback", "callback": "retired_button"}]:
             self.server.session(101).last_action = 0
             r = await self.client.post("/api/action", headers=self.headers, json={**action, "request_id": "retired-request"})
             self.assertEqual(r.status, 400)

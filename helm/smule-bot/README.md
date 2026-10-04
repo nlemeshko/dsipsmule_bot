@@ -16,6 +16,15 @@ Ingress используют порт 8080; контейнер слушает э
 Readiness проверяет `/healthz`. Переменные `MINI_APP_*` берутся из `env` в values,
 а `existingSecret.keys` может переопределить их. Токен и ключи API берутся из Secret `env`.
 
+Для бесплатных AI-функций добавьте в этот же Secret `GROQ_API_KEY`
+(текст и расшифровка), `CLOUDFLARE_API_TOKEN` и `CLOUDFLARE_ACCOUNT_ID`
+(картинки). Оставьте аккаунты Groq и Workers AI на бесплатных тарифах.
+Список групп задаётся `ALLOWED_GROUP_ID` через запятую. Модели по умолчанию:
+`openai/gpt-oss-20b`, `whisper-large-v3-turbo`, `@cf/black-forest-labs/flux-1-schnell`.
+Отдельные Deployments, GPU, Ollama и изменения Ingress не нужны.
+После изменения Secret нужно заменить Pod: переменные окружения читаются при запуске.
+Обновляйте образ вместе с кодом: перезапуск старого образа не добавит AI-функции.
+
 Зал славы хранится в S3: endpoint `https://nbg1.your-objectstorage.com`,
 бакет `dsipsmule`, файл `dsipsmule-bot/hall/hall.csv`. Эти значения уже заданы
 в `env` в values. Добавьте `S3_ACCESS_KEY_ID` и `S3_SECRET_ACCESS_KEY` в
@@ -87,7 +96,10 @@ kubectl get pvc -l app.kubernetes.io/name=smule-bot
 
 - `BOT_TOKEN` - токен Telegram бота
 - `ADMINS` - список ID администраторов через запятую (опционально)
-- `CHARACTER_AI_TOKEN`, `CHARACTER_ID`, `CHARACTER_VOICE_ID` - для команды /ask (опционально)
+- `GROQ_API_KEY` - вопросы и расшифровка аудио (опционально)
+- `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` - создание картинок (опционально)
+- `ALLOWED_GROUP_ID` - разрешённые для AI группы через запятую (без списка AI работает только в личке)
+- `CHARACTER_AI_TOKEN`, `CHARACTER_ID`, `CHARACTER_VOICE_ID` - прежний /ask, если Groq не подключён (опционально)
 
 ### Опциональные переменные
 

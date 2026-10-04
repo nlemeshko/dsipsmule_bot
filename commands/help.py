@@ -27,6 +27,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE, *, mi
 /casino - игра в слоты
 /pole - игра "Поле чудес"
 /ask [вопрос] - задать вопрос AI-персонажу
+/draw [описание] - нарисовать картинку
+/transcribe - расшифровать аудио (в группе ответьте на голосовое)
 
 **Зал славы/позора:**
 /hall [legend/cringe] [имя] - номинировать пользователя
@@ -38,6 +40,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE, *, mi
 - Бот отвечает на любые вопросы
 - Доступны все команды через кнопки
         """
-    if not miniapp:
+    if miniapp:
+        help_text = help_text.replace("/transcribe - расшифровать аудио (в группе ответьте на голосовое)\n", "")
+    else:
         help_text = help_text.replace("**В личных сообщениях:**", "**Критика и подтверждение:**\n/roast - получить критику исполнения\n/proof - подтвердить исполнение\n\n**В личных сообщениях:**")
     await update.message.reply_text(help_text, parse_mode='Markdown')
