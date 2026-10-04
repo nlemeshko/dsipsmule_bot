@@ -15,6 +15,21 @@ logger = logging.getLogger(__name__)
 TRANSCRIBE_STATE = "ai_waiting_audio"
 
 
+def sender_id(update):
+    """Anonymous admins use their group's identity, not Telegram's fake bot user."""
+    msg = update.message
+    if not msg:
+        return None
+    if msg.sender_chat:
+        if (msg.chat.type in {"group", "supergroup"}
+                and msg.sender_chat.id == msg.chat_id
+                and not getattr(msg, "is_automatic_forward", False)):
+            return msg.chat_id
+        return None
+    user = update.effective_user
+    return user.id if user and not user.is_bot else None
+
+
 class AIRuntime:
     def __init__(self, started_at=None):
         self.started_at = time.time() if started_at is None else started_at
@@ -25,8 +40,7 @@ class AIRuntime:
 
     def is_new(self, update):
         msg = update.message
-        user = update.effective_user
-        return bool(msg and user and not user.is_bot and not msg.sender_chat
+        return bool(msg and sender_id(update) is not None
                     and msg.date.timestamp() > self.started_at
                     and 0 <= time.time() - msg.date.timestamp() < 300)
 
@@ -80,7 +94,7 @@ async def answer(update, context, prompt, *, quiet=False):
     if not permitted(update, context):
         return
     state = runtime(context)
-    if not state.throttle("text", update.effective_user.id, 5):
+    if not state.throttle("text", sender_id(update), 5):
         if not quiet:
             await update.effective_message.reply_text("Подождите 5 секунд перед следующим вопросом.")
         return
@@ -110,7 +124,7 @@ async def draw_command(update, context):
         await update.effective_message.reply_text("Опишите картинку: /draw Кот с гитарой в золотом свете")
         return
     state = runtime(context)
-    if not state.throttle("image", update.effective_user.id, 30):
+    if not state.throttle("image", sender_id(update), 30):
         await update.effective_message.reply_text("Подождите 30 секунд перед следующей картинкой.")
         return
     try:
@@ -125,7 +139,7 @@ async def transcribe_bytes(update, context, content, filename):
     if not permitted(update, context):
         return
     state = runtime(context)
-    if not state.throttle("speech", update.effective_user.id, 5):
+    if not state.throttle("speech", sender_id(update), 5):
         await update.effective_message.reply_text("Подождите 5 секунд перед следующим аудио.")
         return
     try:

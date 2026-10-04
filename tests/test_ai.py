@@ -49,7 +49,8 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         bot_message = update()
         bot_message.effective_user.is_bot = True
         messages.append(bot_message)
-        messages.append(update(sender_chat=SimpleNamespace(id=-1001)))
+        messages.append(update(sender_chat=SimpleNamespace(id=-999)))
+        messages.append(update(sender_chat=SimpleNamespace(id=-1001), is_automatic_forward=True))
         with patch("commands.ai.random.random", return_value=0):
             for msg in messages:
                 await group_message(msg, self.context)
@@ -99,6 +100,35 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         for msg in [update(age=21, text=None, voice=voice), update(chat_id=-999, text=None, voice=voice)]:
             await group_message(msg, self.context)
         self.context.bot.get_file.assert_not_called()
+
+    async def test_anonymous_admin_voice_is_transcribed_once_using_the_group_identity(self):
+        group_id = -1004445297166
+        file = SimpleNamespace(file_path="voice.oga", download_as_bytearray=AsyncMock(return_value=b"ogg"))
+        self.context.bot.get_file.return_value = file
+        voice = SimpleNamespace(file_id="file", file_size=3, duration=2)
+        msg = update(chat_id=group_id, text=None, voice=voice, sender_chat=SimpleNamespace(id=group_id))
+        msg.effective_user = SimpleNamespace(id=1087968824, is_bot=True)
+        with patch.dict("os.environ", {"ALLOWED_GROUP_ID": str(group_id)}):
+            await group_message(msg, self.context)
+            await group_message(msg, self.context)
+        self.state.client.transcribe.assert_awaited_once_with(b"ogg", "voice.ogg")
+        msg.effective_message.reply_text.assert_awaited_once_with("Расшифровка:\nПривет из голосового")
+        self.assertIn(("speech", group_id), self.state.users)
+        self.assertNotIn(("speech", 1087968824), self.state.users)
+
+    async def test_anonymous_admin_text_keeps_new_only_group_and_probability_checks(self):
+        anonymous = SimpleNamespace(id=-1001)
+        with patch("commands.ai.random.random", return_value=0):
+            for msg in [update(age=21, sender_chat=anonymous),
+                        update(chat_id=-999, sender_chat=SimpleNamespace(id=-999)),
+                        update(sender_chat=anonymous, is_automatic_forward=True)]:
+                msg.effective_user = None
+                await group_message(msg, self.context)
+            self.state.client.text.assert_not_called()
+            fresh = update(sender_chat=anonymous)
+            fresh.effective_user = None
+            await group_message(fresh, self.context)
+        self.state.client.text.assert_awaited_once_with("Привет")
 
     async def test_anonymous_audio_keeps_moderation_routing(self):
         from commands.callback_handler import user_states, ANON_STATE
