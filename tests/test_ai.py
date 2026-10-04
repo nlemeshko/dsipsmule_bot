@@ -163,15 +163,53 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         image = b"\xff\xd8\xffJPEG"
         client = AIClient()
         client.request = AsyncMock(return_value={"success": True, "result": {"image": base64.b64encode(image).decode()}})
-        with patch.dict("os.environ", {"CLOUDFLARE_ACCOUNT_ID": "a" * 32, "CLOUDFLARE_API_TOKEN": "offline"}):
+        with patch.dict("os.environ", {"CLOUDFLARE_ACCOUNT_ID": "a" * 32, "CLOUDFLARE_API_TOKEN": "offline", "GROQ_API_KEY": "", "CLOUDFLARE_IMAGE_MODEL": ""}):
             self.assertEqual(await client.image("Кот"), image)
-            self.assertEqual(client.request.call_args.kwargs["payload"], {"prompt": "Кот", "steps": 4})
-            self.assertTrue(client.request.call_args.args[1].endswith("/@cf/black-forest-labs/flux-1-schnell"))
+            form = client.request.call_args.kwargs["form"]
+            self.assertTrue(form.is_multipart)
+            self.assertEqual({field[0]["name"]: field[2] for field in form._fields},
+                             {"prompt": "Кот", "width": "1024", "height": "1024"})
+            self.assertTrue(client.request.call_args.args[1].endswith("/@cf/black-forest-labs/flux-2-klein-4b"))
             for data in [{"success": False}, {"success": True, "result": {"image": "invalid"}},
                          {"success": True, "result": {"image": base64.b64encode(b"not an image").decode()}}]:
                 client.request.return_value = data
                 with self.assertRaises(AIError):
                     await client.image("Кот")
+
+    async def test_russian_description_is_translated_with_a_dedicated_prompt_and_no_added_style(self):
+        from services.ai import IMAGE_TRANSLATION_PROMPT
+        client = AIClient()
+        image = {"success": True, "result": {"image": base64.b64encode(b"\xff\xd8\xffJPEG").decode()}}
+        client.request = AsyncMock(side_effect=[{"choices": [{"message": {"content": "A small kitten"}}]}, image])
+        with patch.dict("os.environ", {"CLOUDFLARE_ACCOUNT_ID": "a" * 32, "CLOUDFLARE_API_TOKEN": "offline", "GROQ_API_KEY": "offline", "CLOUDFLARE_IMAGE_MODEL": ""}):
+            await client.image("Маленький котенок")
+        calls = client.request.call_args_list
+        self.assertEqual(calls[0].kwargs["payload"]["messages"], [
+            {"role": "system", "content": IMAGE_TRANSLATION_PROMPT},
+            {"role": "user", "content": "Маленький котенок"},
+        ])
+        form = calls[1].kwargs["form"]
+        self.assertEqual({field[0]["name"]: field[2] for field in form._fields}["prompt"], "A small kitten")
+
+    async def test_image_model_overrides_and_translation_failure_keep_generation_working(self):
+        client = AIClient()
+        image = {"success": True, "result": {"image": base64.b64encode(b"\xff\xd8\xffJPEG").decode()}}
+        client.request = AsyncMock(return_value=image)
+        client.text = AsyncMock(side_effect=AIError("Лимит"))
+        with patch.dict("os.environ", {"CLOUDFLARE_ACCOUNT_ID": "a" * 32, "CLOUDFLARE_API_TOKEN": "offline", "GROQ_API_KEY": "offline"}):
+            with patch.dict("os.environ", {"CLOUDFLARE_IMAGE_MODEL": "@cf/black-forest-labs/flux-2-klein-9b"}):
+                await client.image("Котёнок")
+                self.assertTrue(client.request.call_args.args[1].endswith("/flux-2-klein-9b"))
+                form = client.request.call_args.kwargs["form"]
+                self.assertEqual({field[0]["name"]: field[2] for field in form._fields}["prompt"], "Котёнок")
+            with patch.dict("os.environ", {"CLOUDFLARE_IMAGE_MODEL": "@cf/black-forest-labs/flux-1-schnell"}):
+                await client.image("A kitten")
+                self.assertEqual(client.request.call_args.kwargs["payload"], {"prompt": "A kitten", "steps": 4})
+            previous_calls = client.request.await_count
+            with patch.dict("os.environ", {"CLOUDFLARE_IMAGE_MODEL": "unsupported"}):
+                with self.assertRaises(AIError):
+                    await client.image("Котёнок")
+            self.assertEqual(client.request.await_count, previous_calls)
 
     async def test_missing_key_and_input_limits_do_not_call_network(self):
         with patch("services.ai.aiohttp.ClientSession") as session:

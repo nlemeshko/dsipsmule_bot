@@ -20,7 +20,12 @@ Readiness проверяет `/healthz`. Переменные `MINI_APP_*` бе�
 (текст и расшифровка), `CLOUDFLARE_API_TOKEN` и `CLOUDFLARE_ACCOUNT_ID`
 (картинки). Оставьте аккаунты Groq и Workers AI на бесплатных тарифах.
 Список групп задаётся `ALLOWED_GROUP_ID` через запятую. Модели по умолчанию:
-`openai/gpt-oss-20b`, `whisper-large-v3-turbo`, `@cf/black-forest-labs/flux-1-schnell`.
+`openai/gpt-oss-20b`, `whisper-large-v3-turbo`, `@cf/black-forest-labs/flux-2-klein-4b`.
+Для другой модели картинок задайте `CLOUDFLARE_IMAGE_MODEL` в Secret:
+`@cf/black-forest-labs/flux-2-klein-9b` или прежнюю `@cf/black-forest-labs/flux-1-schnell`.
+Klein 9B расходует около 1364 Neurons на 1024×1024: бесплатной дневной квоты хватит
+примерно на 7 картинок; Klein 4B — примерно на 95. Русские описания переводятся
+через Groq при наличии ключа; при сбое перевода отправляется исходный текст.
 Отдельные Deployments, GPU, Ollama и изменения Ingress не нужны.
 После изменения Secret нужно заменить Pod: переменные окружения читаются при запуске.
 Обновляйте образ вместе с кодом: перезапуск старого образа не добавит AI-функции.
