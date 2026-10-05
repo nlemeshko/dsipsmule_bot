@@ -45,8 +45,8 @@ class AIRuntime:
                     and msg.date.timestamp() > self.started_at
                     and 0 <= time.time() - msg.date.timestamp() < 300)
 
-    def claim(self, chat_id, message_id):
-        key = (chat_id, message_id)
+    def claim(self, chat_id, message_id, *, kind=None):
+        key = (kind, chat_id, message_id) if kind else (chat_id, message_id)
         if key in self.seen:
             return False
         self.seen[key] = True
@@ -123,7 +123,20 @@ async def answer(update, context, prompt, *, quiet=False, rate_limit=True):
             await update.effective_message.reply_text("Подождите 5 секунд перед следующим вопросом.")
         return
     try:
-        await reply_text(update.effective_message, await state.client.text(prompt))
+        instruction = ""
+        if context.bot_data.get("fun_ready"):
+            from services.fun import mood_instruction
+            import asyncio
+            try:
+                instruction = await asyncio.to_thread(mood_instruction)
+            except Exception as exc:
+                logger.warning("Mood unavailable: %s", type(exc).__name__)
+        if instruction:
+            from services.ai import SYSTEM_PROMPT
+            text = await state.client.text(prompt, system_prompt=SYSTEM_PROMPT + " Настроение на этот час: " + instruction)
+        else:
+            text = await state.client.text(prompt)
+        await reply_text(update.effective_message, text)
     except AIError as exc:
         logger.warning("AI text unavailable: %s", exc)
         if not quiet:
@@ -248,6 +261,17 @@ async def group_message(update, context):
         return
     from commands.word_commands import match_word_command, run_word_command
     word_command = match_word_command(msg.text)
+    if context.bot_data.get("fun_ready"):
+        from commands.fun import ambient_ded
+        if await ambient_ded(update, context) and not word_command:
+            from telegram.ext import ApplicationHandlerStop
+            state.claim(msg.chat_id, msg.message_id)
+            raise ApplicationHandlerStop
+    if msg.chat_id in context.bot_data.get("fun_games_active", set()):
+        from commands.fun import guess_reply
+        if await guess_reply(update, context, automatic=True):
+            from telegram.ext import ApplicationHandlerStop
+            raise ApplicationHandlerStop
     if word_command:
         from telegram.ext import ApplicationHandlerStop
         if state.claim(msg.chat_id, msg.message_id):

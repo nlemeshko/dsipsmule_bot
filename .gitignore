@@ -35,3 +35,5 @@ htmlcov/
 
 # Misc
 *.sqlite3
+# Local cache of participant cards, votes and games (authoritative copy is in S3).
+/data/fun.json

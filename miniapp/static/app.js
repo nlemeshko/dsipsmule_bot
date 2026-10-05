@@ -13,6 +13,9 @@ const catalog = {
     ["chat", "☏", "Поговорить с ботом", "Приветствия, беседы и немного настроения.", "#382a1c"],
   ],
   fun: [
+    ["ded", "🧓", "Дедометр", "Общий градус ворчания во всех чатах.", "#382a1c"],
+    ["guess", "♫", "Угадай песню", "Эмодзи вместо названия. Дед ждёт ответ.", "#382a1c"],
+    ["mood", "🎭", "Настроение Ведьмака", "Выбери характер деда на час вместе с чатами.", "#382a1c"],
     ["prediction", "🔮", "Предсказание", "Что ждёт твой голос сегодня?", "#382a1c"],
     ["pole", "◎", "Поле чудес", "Буква за буквой — угадай слово.", "#382a1c"],
     ["casino", "🎰", "Казино", "Крути барабаны и лови удачу.", "#382a1c"],
@@ -21,6 +24,8 @@ const catalog = {
     ["meme", "☺", "Мем", "Серьёзность подождёт.", "#382a1c"],
   ],
   social: [
+    ["passport", "🪪", "Паспорт сквада", "Один на всю жизнь. Дед подпись не меняет.", "#382a1c"],
+    ["order", "🎖", "Твой орден", "Постоянная награда за вокальные подвиги.", "#382a1c"],
     ["halllist", "🏆", "Зал славы и позора", "Посмотри, о ком говорит клуб.", "#382a1c"],
     ["hall", "✦", "Номинация", "Кто заслужил место в истории?", "#382a1c"],
     ["vote", "✓", "Голосование", "Поддержи своего номинанта.", "#382a1c"],
@@ -132,7 +137,7 @@ function renderMessages() {
 }
 function updateComposer() {
   const state = data.state || "";
-  $("composer").hidden = !(state || data.playing || current?.[0] === "chat");
+  $("composer").hidden = !(state || data.playing || data.guessing || current?.[0] === "chat");
   $("command-form").hidden = !current || !inputCommands[current[0]];
   if (current && inputCommands[current[0]]) $("composer").hidden = true;
   $("attachments").hidden = state !== "anon_waiting_text";
@@ -140,7 +145,7 @@ function updateComposer() {
     anon_waiting_text: "Текст анонимки или подпись к вложению", song_waiting_text: "Название песни или ссылка",
     rate_waiting_link: "Ссылка на исполнение в Smule", promote_waiting_link: "Ссылка на трек",
   };
-  $("composer-label").textContent = labels[state] || (data.playing ? "Буква или слово" : "Сообщение боту");
+  $("composer-label").textContent = labels[state] || (data.guessing ? "Название песни" : data.playing ? "Буква или слово" : "Сообщение боту");
   $("quick-replies").replaceChildren();
 }
 function showHome(section = "home") {
@@ -158,7 +163,7 @@ function showWorkspace(item) {
 }
 async function openItem(item) {
   if (pending) return;
-  data = {...data, messages: [], state: null, playing: false};
+  data = {...data, messages: [], state: null, playing: false, guessing: false};
   $("message-text").value = ""; $("file").value = ""; notice("");
   showWorkspace(item);
   if (!inputCommands[item[0]]) await perform(item[5] ? {action: "callback", callback: item[5]} : {action: "command", command: item[0]});
@@ -217,7 +222,7 @@ async function boot() {
     data = await (await api("/api/bootstrap")).json(); authenticated = true;
     $("greeting").textContent = `${data.user.first_name}, пой, делись и будь частью сообщества.`;
     $("avatar").textContent = data.user.first_name.slice(0, 1).toUpperCase();
-    if (data.state || data.playing) showWorkspace(["resume", "", "Продолжить", "Твой незавершённый контракт. Продолжи с текущего шага."]);
+    if (data.state || data.playing || data.guessing) showWorkspace(["resume", "", "Продолжить", "Твой незавершённый контракт. Продолжи с текущего шага."]);
   } catch (error) { notice(error.message); }
 }
 boot();

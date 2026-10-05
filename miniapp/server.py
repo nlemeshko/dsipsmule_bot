@@ -83,6 +83,7 @@ def command_handlers():
     from commands.help import help_command
     from commands.pole import pole_command
     from commands.prediction import prediction_command
+    from commands.fun import ded_command, passport_command, order_command, guess_command, mood_command
     async def chat_command(update, context):
         await update.effective_message.reply_text("Привет! Напиши сообщение — я на связи.")
 
@@ -93,7 +94,8 @@ def command_handlers():
                 random=random_command, cat=cat_command, meme=meme_command,
                 casino=casino_command, hall=hall_command, halllist=halllist_command,
                 vote=vote_command, help=app_help_command,
-                pole=pole_command, prediction=prediction_command)
+                pole=pole_command, prediction=prediction_command, ded=ded_command,
+                passport=passport_command, order=order_command, guess=guess_command, mood=mood_command)
 
 
 class MiniAppServer:
@@ -162,7 +164,8 @@ class MiniAppServer:
         game = pole_games.get(user["id"], {})
         return {"user": {"first_name": user["first_name"], "username": user.get("username")},
                 "messages": session.history, "state": app_state(user["id"]),
-                "playing": game.get("chat_id") == user["id"]}
+                "playing": game.get("chat_id") == user["id"],
+                "guessing": bool(self.application.user_data[user["id"]].get("fun_guess"))}
 
     async def index(self, request):
         return web.FileResponse(STATIC / "index.html")
@@ -272,6 +275,8 @@ class MiniAppServer:
                 if command in {"ask", "draw", "hall", "vote"} and not text.strip():
                     raise ValueError("Заполните поле")
                 user_states.pop(user["id"], None)
+                if command != "guess":
+                    context.user_data.pop("fun_guess", None)
                 if command != "pole" and pole_games.get(user["id"], {}).get("chat_id") == user["id"]:
                     pole_games.pop(user["id"], None)
                 update = make_update(bot, f"/{command} {text}".strip())
@@ -286,12 +291,18 @@ class MiniAppServer:
                     raise ValueError("Эта кнопка недоступна")
                 if callback in PRIMARY_CALLBACKS:
                     user_states.pop(user["id"], None)
+                    context.user_data.pop("fun_guess", None)
                     if pole_games.get(user["id"], {}).get("chat_id") == user["id"]:
                         pole_games.pop(user["id"], None)
                 update = make_update(bot, callback=callback)
-                handler = handle_callback_query
+                if callback.startswith("fun:"):
+                    from commands.fun import fun_callback
+                    handler = fun_callback
+                else:
+                    handler = handle_callback_query
             elif action == "reset":
                 user_states.pop(user["id"], None)
+                context.user_data.pop("fun_guess", None)
                 if pole_games.get(user["id"], {}).get("chat_id") == user["id"]:
                     pole_games.pop(user["id"], None)
                 session.history.clear()
@@ -308,6 +319,9 @@ class MiniAppServer:
                     handler = handle_fsm_message
                 elif pole_games.get(user["id"], {}).get("chat_id") == user["id"]:
                     handler = handle_pole_message
+                elif context.user_data.get("fun_guess"):
+                    from commands.fun import guess_reply
+                    handler = guess_reply
                 else:
                     handler = handle_personal_message
             # Each accepted action replaces the visible result, retaining FSM/game state.

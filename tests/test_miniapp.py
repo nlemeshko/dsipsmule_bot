@@ -137,6 +137,75 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("/proof", data["messages"][-1]["text"])
         self.assertNotIn("/transcribe", data["messages"][-1]["text"])
 
+    async def test_permanent_cards_are_shared_with_telegram_and_survive_a_new_app_session(self):
+        from services import fun
+        from storage import fun as storage
+        from test_hall_storage import FakeS3
+        with tempfile.TemporaryDirectory() as directory, patch.dict("os.environ", {"DATA_DIR": directory}), patch.object(
+                storage, "remote_storage", return_value=(FakeS3(), "bucket", "fun.json")):
+            for command in ("passport", "order"):
+                first = await self.action(action="command", command=command)
+                card = fun.permanent_card(101, "Новый ник в Telegram", command)
+                self.assertIn(card["number"], first["messages"][-1]["text"])
+                storage.state_path().unlink()
+                self.server.sessions.pop(101)
+                second = await self.action(action="command", command=command)
+                self.assertEqual(first["messages"][-1]["text"], second["messages"][-1]["text"])
+            data = await self.action(action="command", command="ded")
+            self.assertIn("Общий дедометр", data["messages"][-1]["text"])
+        self.bot.send_message.assert_not_called()
+
+    async def test_guess_composer_hint_resume_correct_answer_and_surrender(self):
+        from services import fun
+        from storage import fun as storage
+        from test_hall_storage import FakeS3
+        with tempfile.TemporaryDirectory() as directory, patch.dict("os.environ", {"DATA_DIR": directory}), patch.object(
+                storage, "remote_storage", return_value=(FakeS3(), "bucket", "fun.json")):
+            data = await self.action(action="command", command="guess")
+            self.assertTrue(data["guessing"])
+            game = fun.guess_game(101)
+            hint = data["messages"][-1]["buttons"][0][0]["callback"]
+            data = await self.action(action="callback", callback=hint)
+            self.assertIn(game["hint"], data["messages"][-1]["text"])
+            self.assertTrue(data["guessing"])
+            storage.state_path().unlink()
+            self.application.user_data[101].clear()
+            data = await self.action(action="command", command="guess")
+            self.assertTrue(data["guessing"])
+            self.assertEqual(fun.guess_game(101), game)
+            data = await self.action(action="message", text=game["answer"])
+            self.assertFalse(data["guessing"])
+            self.assertIn("угадано", data["messages"][-1]["text"])
+            data = await self.action(action="command", command="guess")
+            end = data["messages"][-1]["buttons"][0][1]["callback"]
+            data = await self.action(action="callback", callback=end)
+            self.assertFalse(data["guessing"])
+            self.assertTrue(fun.guess_game(101)["finished"])
+            await self.action(action="command", command="guess")
+            data = await self.action(action="command", command="help")
+            self.assertFalse(data["guessing"])
+
+    async def test_mood_buttons_share_votes_with_groups_and_reject_expired_rounds(self):
+        from services import fun
+        from storage import fun as storage
+        from test_hall_storage import FakeS3
+        with tempfile.TemporaryDirectory() as directory, patch.dict("os.environ", {"DATA_DIR": directory}), patch.object(
+                storage, "remote_storage", return_value=(FakeS3(), "bucket", "fun.json")):
+            data = await self.action(action="command", command="mood")
+            mood = fun.open_mood()
+            fun.vote_mood(101, mood["token"], "angry")  # Same person voted in a group.
+            choice = data["messages"][-1]["buttons"][1][0]["callback"]
+            data = await self.action(action="callback", callback=choice)
+            self.assertIn("Сейчас: После репетиции", data["messages"][-1]["text"])
+            self.assertEqual(fun.open_mood()["votes"], {"101": "tired"})
+            def expire(state):
+                state["community"]["mood"]["until"] = time.time() - 1
+                return True, None
+            storage.update_state(expire)
+            data = await self.action(action="callback", callback=choice)
+            self.assertIn("Голосование завершено", data["messages"][-1]["text"])
+        fun.invalidate_mood()
+
     async def test_new_actions_replace_results_without_resetting_the_current_step(self):
         first = await self.action(action="callback", callback="button1")
         first_ids = {m["id"] for m in first["messages"]}

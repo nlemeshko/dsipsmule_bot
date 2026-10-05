@@ -96,6 +96,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     
     user_id = query.from_user.id
     chat_id = query.message.chat.id
+    if getattr(query.message.chat, "type", None) == "private" and query.data in {"button1", "button2", "button3", "button4", "button6"}:
+        context.user_data.pop("fun_guess", None)
     
     print(f"Callback query received: {query.data} from user {query.from_user.username or query.from_user.id} in chat {chat_id}")
     

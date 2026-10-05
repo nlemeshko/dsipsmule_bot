@@ -7,6 +7,20 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 
+WORD_HELP_TEXT = """**Словесные команды в разрешённых группах:**
+котик, кот, кошка, киська, котёнок, мяу → /cat
+судьба, предскажи, погадай, гороскоп → /prediction
+песня, песню, музыка, музло, трек → /random
+мем, мемчик, мемас, прикол, ржака → /meme
+казино, казик, слоты, бурмалда → /casino
+слава, легенды, позор, зал славы → /halllist
+пруф, пруфы, докажи, подтверди → /proof
+лох, лошара, лузер, прожарь → /roast
+Нарисуй / изобрази / сгенерируй картинку [описание] → /draw
+паспорт → /passport; орден или награда → /order
+Регистр не важен, распознаются целые слова и их частые формы.
+"""
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE, *, miniapp=False):
     """Обработчик команды /help"""
     help_text = """
@@ -29,11 +43,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE, *, mi
 /ask [вопрос] - задать вопрос AI-персонажу
 /draw [описание] - нарисовать картинку
 /transcribe - расшифровать аудио (в группе ответьте на голосовое)
-
-**Словесные команды в разрешённых группах:**
-котик → /cat; судьба → /prediction; песня → /random; мем → /meme
-казино или бурмалда → /casino; слава → /halllist; пруф → /proof; лох → /roast
-Нарисуй [описание] → /draw
+/ded - общий дедометр, переживает редеплой
+/passport - постоянный паспорт сквада
+/order - твой постоянный орден
+/guess - угадай песню по эмодзи
+/mood - выбрать общее настроение Ведьмака на час
 
 **Зал славы/позора:**
 /hall [legend/cringe] [имя] - номинировать пользователя
@@ -47,11 +61,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE, *, mi
         """
     if miniapp:
         help_text = help_text.replace("/transcribe - расшифровать аудио (в группе ответьте на голосовое)\n", "")
-        help_text = help_text.replace(
-            "**Словесные команды в разрешённых группах:**\n"
-            "котик → /cat; судьба → /prediction; песня → /random; мем → /meme\n"
-            "казино или бурмалда → /casino; слава → /halllist; пруф → /proof; лох → /roast\n"
-            "Нарисуй [описание] → /draw\n", "")
     else:
+        help_text = help_text.replace("**Зал славы/позора:**", WORD_HELP_TEXT + "\n**Зал славы/позора:**")
         help_text = help_text.replace("**В личных сообщениях:**", "**Критика и подтверждение:**\n/roast - получить критику исполнения\n/proof - подтвердить исполнение\n\n**В личных сообщениях:**")
     await update.message.reply_text(help_text, parse_mode='Markdown')

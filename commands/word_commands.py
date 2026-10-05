@@ -8,6 +8,7 @@ from commands.entertainment import cat_command, casino_command, meme_command, ra
 from commands.hall import halllist_command
 from commands.prediction import prediction_command
 from commands.roast_proof import proof_command, roast_command
+from commands.fun import passport_command, order_command, ded_command, guess_command, mood_command
 
 WORD_COMMANDS = {
     "котик": cat_command,
@@ -19,9 +20,64 @@ WORD_COMMANDS = {
     "слава": halllist_command,
     "пруф": proof_command,
     "лох": roast_command,
+    "паспорт": passport_command,
+    "орден": order_command,
+    "дедометр": ded_command,
+    "угадай": guess_command,
+    "настроение": mood_command,
 }
-WORD_PATTERN = re.compile(r"\b(" + "|".join(WORD_COMMANDS) + r")\b", re.IGNORECASE)
-DRAW_PATTERN = re.compile(r"\bнарисуй\b", re.IGNORECASE)
+WORD_ALIASES = {
+    "котик": (
+        "котик", "котики", "котика", "котиков", "котику", "котиком", "котике", "коти",
+        "кот", "кота", "коту", "котом", "коте", "коты", "котов", "котам", "котами", "котах",
+        "кошка", "кошки", "кошку", "кошке", "кошек", "кошкой", "кошечка", "кошечки", "кошечку",
+        "котёнок", "котенок", "котёнка", "котенка", "котята", "котят", "котэ", "котейка", "котейку",
+        "котяра", "котяру", "киса", "кису", "киска", "киску", "киська", "киську", "кисуля",
+        "кисочка", "кисонька", "мяу", "мур", "мурмур",
+    ),
+    "судьба": (
+        "судьба", "судьбу", "судьбы", "судьбе", "судьбой", "предсказание", "предсказания",
+        "предскажи", "предскажите", "погадай", "погадайте", "гадание", "гороскоп", "пророчество",
+    ),
+    "песня": (
+        "песня", "песню", "песни", "песней", "песен", "песнями", "песенка", "песенку",
+        "музыка", "музыку", "музычка", "музычку", "музло", "трек", "треки", "трека", "треков",
+    ),
+    "мем": (
+        "мем", "мемы", "мема", "мемов", "мемчик", "мемчики", "мемас", "мемасы",
+        "мемасик", "мемасики", "прикол", "приколы", "прикольчик", "ржака", "ржач", "угар",
+    ),
+    "казино": ("казино", "казик", "слоты", "слот", "слотик", "слотики", "джекпот", "рулетка", "рулетку"),
+    "бурмалда": ("бурмалда", "бурмалду", "бурмалды", "бурмалде", "бурмалдочка", "бурмалдочку"),
+    "слава": ("слава", "славу", "славы", "легенды", "легенда", "легенд", "позор", "кринж",
+              "зал славы", "зал позора", "зал легенд"),
+    "пруф": ("пруф", "пруфы", "пруфов", "пруфани", "докажи", "докажите", "доказательство",
+             "доказательства", "подтверди", "подтвердите", "подтверждение"),
+    "лох": ("лох", "лохи", "лоха", "лохов", "лошара", "лошары", "лошару", "лузер", "лузеры",
+            "неудачник", "неудачники", "прожарь", "прожарка", "обосри", "засри"),
+    "паспорт": ("паспорт", "паспорт сквада"),
+    "орден": ("орден", "награда", "награду"),
+    "дедометр": ("дедометр",),
+    "угадай": ("угадай песню",),
+    "настроение": ("настроение бота", "настрой деда"),
+}
+DRAW_ALIASES = (
+    "нарисуй", "нарисуйте", "рисуй", "нарисовать", "изобрази", "изобразите", "намалюй",
+    "сгенерируй картинку", "сгенерируй изображение", "создай картинку", "создай изображение",
+    "сделай картинку", "сделай изображение",
+)
+ALIAS_COMMANDS = {alias: word for word, aliases in WORD_ALIASES.items() for alias in aliases}
+
+
+def alias_pattern(aliases):
+    # Longer phrases win at the same position; flexible spaces also accept line breaks.
+    alternatives = [r"\s+".join(re.escape(part) for part in alias.split())
+                    for alias in sorted(aliases, key=len, reverse=True)]
+    return re.compile(r"\b(" + "|".join(alternatives) + r")\b", re.IGNORECASE)
+
+
+WORD_PATTERN = alias_pattern(ALIAS_COMMANDS)
+DRAW_PATTERN = alias_pattern(DRAW_ALIASES)
 
 
 def match_word_command(text):
@@ -29,7 +85,7 @@ def match_word_command(text):
     if drawing:
         return "нарисуй", text[drawing.end():].lstrip(" \t\r\n,:—-")
     match = WORD_PATTERN.search(text)
-    return (match.group().lower(), "") if match else None
+    return (ALIAS_COMMANDS[" ".join(match.group().lower().split())], "") if match else None
 
 
 class ReplyMessage:

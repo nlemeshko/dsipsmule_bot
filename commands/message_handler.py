@@ -38,10 +38,16 @@ async def handle_personal_message(update: Update, context: ContextTypes.DEFAULT_
     chat_id = chat.id if chat else None
     
     if user_id in pole_games and pole_games[user_id]['chat_id'] == chat_id:
+        context.user_data.pop("fun_guess", None)
         # Если игра активна, передаем управление обработчику игры
         from commands.pole import handle_pole_message
         await handle_pole_message(update, context)
         return
+
+    if context.user_data.get("fun_guess"):
+        from commands.fun import guess_reply
+        if await guess_reply(update, context):
+            return
 
     if os.getenv("GROQ_API_KEY"):
         from commands.ai import answer

@@ -9,7 +9,7 @@ from telegram import Update
 from telegram.ext import ApplicationHandlerStop
 
 from commands.ai import AIRuntime, group_message
-from commands.word_commands import WORD_COMMANDS, match_word_command
+from commands.word_commands import WORD_COMMANDS, WORD_ALIASES, match_word_command
 
 
 def message(text, *, message_id=10, chat_id=-1001, age=0, sender_chat=None, is_bot=False, reply=None):
@@ -52,18 +52,45 @@ class WordCommandTests(unittest.IsolatedAsyncioTestCase):
             await group_message(update, self.context)
 
     def test_whole_words_case_and_drawing_priority(self):
-        for text in ["котики", "мемный", "судьбоносный", "песнями", "бурмалдочка", "пруфы", "лохотрон"]:
+        for text in ["котлета", "котировка", "мемный", "мемуары", "судьбоносный", "песочница", "пруфовый", "лохотрон"]:
             self.assertIsNone(match_word_command(text))
         self.assertEqual(match_word_command("Пришли МЕМ!"), ("мем", ""))
         self.assertEqual(match_word_command("Песня, а потом котик"), ("песня", ""))
         self.assertEqual(match_word_command("Котик? Бот, НАРИСУЙ: Рыжий кот, мем на стене!"),
                          ("нарисуй", "Рыжий кот, мем на стене!"))
+        self.assertEqual(match_word_command("Открой ЗАЛ \n СЛАВЫ!"), ("слава", ""))
+        self.assertEqual(match_word_command("Кошка? СГЕНЕРИРУЙ \n КАРТИНКУ: Котёнок и мем."),
+                         ("нарисуй", "Котёнок и мем."))
+
+    async def test_synonyms_dispatch_to_same_commands_instead_of_ai(self):
+        examples = {
+            "котик": ["Кот!", "кошка", "киська", "КИСЬКУ", "котёнок", "котенок", "котики", "мяу"],
+            "судьба": ["погадай", "предскажи"],
+            "песня": ["песню", "музычка", "трек"],
+            "мем": ["мемас", "прикол"],
+            "казино": ["казик", "слоты"],
+            "бурмалда": ["бурмалду", "бурмалдочка"],
+            "слава": ["легенды", "зал славы"],
+            "пруф": ["пруфы", "подтверди"],
+            "лох": ["лошара", "прожарь"],
+        }
+        handlers = {word: AsyncMock() for word in examples}
+        index = 0
+        with patch.dict(WORD_COMMANDS, handlers):
+            for word, texts in examples.items():
+                for text in texts:
+                    update = message(text, message_id=100 + index)
+                    await self.trigger(update)
+                    await self.trigger(update)
+                    index += 1
+                self.assertEqual(handlers[word].await_count, len(texts))
+        self.state.client.text.assert_not_called()
 
     async def test_all_shortcuts_dispatch_once_without_groq_or_random_selection(self):
         handlers = {word: AsyncMock() for word in WORD_COMMANDS}
         with patch.dict(WORD_COMMANDS, handlers):
             for index, (word, handler) in enumerate(handlers.items()):
-                update = message("Бот, " + word.upper() + "!", message_id=20 + index)
+                update = message("Бот, " + WORD_ALIASES[word][0].upper() + "!", message_id=20 + index)
                 await self.trigger(update)
                 await self.trigger(update)
                 handler.assert_awaited_once()
@@ -85,7 +112,7 @@ class WordCommandTests(unittest.IsolatedAsyncioTestCase):
         handler.assert_not_called()
 
     async def test_drawing_uses_description_and_replies_without_text_ai(self):
-        update = message("Бот, нарисуй: Маленький КОТИК с гитарой, мем на стене.")
+        update = message("Бот, сгенерируй картинку: Маленький КОТИК с гитарой, мем на стене.")
         await self.trigger(update)
         await self.trigger(update)
         self.state.client.image.assert_awaited_once_with("Маленький КОТИК с гитарой, мем на стене.")
