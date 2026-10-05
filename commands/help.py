@@ -6,6 +6,7 @@
 
 from telegram import Update
 from telegram.ext import ContextTypes
+from services.titles import CHOICES
 
 WORD_HELP_TEXT = """**Словесные команды в разрешённых группах:**
 котик, кот, кошка, киська, котёнок, мяу → /cat
@@ -18,6 +19,7 @@ WORD_HELP_TEXT = """**Словесные команды в разрешённы�
 лох, лошара, лузер, прожарь → /roast
 Нарисуй / изобрази / сгенерируй картинку [описание] → /draw
 паспорт → /passport; орден или награда → /order
+гей, негр → /verdict, голосование за автора сообщения на 5 минут
 Регистр не важен, распознаются целые слова и их частые формы.
 """
 
@@ -48,6 +50,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE, *, mi
 /order - твой постоянный орден
 /guess - угадай песню по эмодзи
 /mood - выбрать общее настроение Ведьмака на час
+/verdict - голосование «{title_choices}» за себя в группе на 5 минут
+/titles - общая таблица итогов голосований
 
 **Зал славы/позора:**
 /hall [legend/cringe] [имя] - номинировать пользователя
@@ -58,7 +62,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE, *, mi
 - /start - показывает кнопку открытия мини-приложения
 - Бот отвечает на любые вопросы
 - Доступны все команды через кнопки
-        """
+        """.format(title_choices=" / ".join(CHOICES.values()))
     if miniapp:
         help_text = help_text.replace("/transcribe - расшифровать аудио (в группе ответьте на голосовое)\n", "")
     else:

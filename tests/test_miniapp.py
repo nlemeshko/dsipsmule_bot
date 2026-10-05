@@ -155,6 +155,24 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Общий дедометр", data["messages"][-1]["text"])
         self.bot.send_message.assert_not_called()
 
+    async def test_title_results_from_groups_are_available_in_miniapp(self):
+        from services import titles
+        from storage import fun as storage
+        from test_hall_storage import FakeS3
+        with tempfile.TemporaryDirectory() as directory, patch.dict("os.environ", {"DATA_DIR": directory}), patch.object(
+                storage, "remote_storage", return_value=(FakeS3(), "bucket", "fun.json")):
+            poll = titles.start(-1001, 10, 101, "Никита")
+            titles.vote(poll["token"], -1001, 202, "legend")
+            with patch("services.titles.time.time", return_value=poll["until"] + 1):
+                titles.due(poll["token"])
+            storage.state_path().unlink()
+            data = await self.action(action="command", command="titles")
+            self.assertIn("Общие итоги «Гей / Негр»", data["messages"][-1]["text"])
+            self.assertIn("Гей: 1", data["messages"][-1]["text"])
+            self.assertIn("Негр: 0", data["messages"][-1]["text"])
+            self.assertIn("Никита — 1 / 0", data["messages"][-1]["text"])
+        self.bot.send_message.assert_not_called()
+
     async def test_guess_composer_hint_resume_correct_answer_and_surrender(self):
         from services import fun
         from storage import fun as storage

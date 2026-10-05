@@ -84,6 +84,7 @@ def command_handlers():
     from commands.pole import pole_command
     from commands.prediction import prediction_command
     from commands.fun import ded_command, passport_command, order_command, guess_command, mood_command
+    from commands.titles import titles_command
     async def chat_command(update, context):
         await update.effective_message.reply_text("Привет! Напиши сообщение — я на связи.")
 
@@ -95,7 +96,7 @@ def command_handlers():
                 casino=casino_command, hall=hall_command, halllist=halllist_command,
                 vote=vote_command, help=app_help_command,
                 pole=pole_command, prediction=prediction_command, ded=ded_command,
-                passport=passport_command, order=order_command, guess=guess_command, mood=mood_command)
+                passport=passport_command, order=order_command, guess=guess_command, mood=mood_command, titles=titles_command)
 
 
 class MiniAppServer:

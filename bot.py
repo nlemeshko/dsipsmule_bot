@@ -23,6 +23,7 @@ from commands.roast_proof import roast_command, proof_command
 from commands.ask import ask_command
 from commands.ai import AIRuntime, draw_command, transcribe_command, private_audio, group_message
 from commands.fun import ded_command, passport_command, order_command, guess_command, mood_command, fun_callback
+from commands.titles import verdict_command, titles_command, titles_callback, worker as titles_worker
 from commands.callback_handler import handle_callback_query
 from commands.fsm_handler import handle_fsm_message, handle_anon_photo
 from miniapp.auth import miniapp_url
@@ -73,8 +74,13 @@ class TelegramBot:
                 int(chat_id) for chat_id, game in state["games"].items()
                 if not game.get("finished") and game["until"] > time.time()
             }
+            application.bot_data["title_pending"] = {
+                token: (poll["until"] if poll["message_id"] and not poll["closed"] else 0)
+                for token, poll in state["community"].get("title_polls", {}).items() if not poll["reported"]
+            }
         except Exception as exc:
             logger.error("Community storage initialization failed: %s", type(exc).__name__)
+        application.bot_data["title_worker"] = asyncio.create_task(titles_worker(application))
         if self.mini_app_url:
             from miniapp.server import MiniAppServer
             self.mini_app_server = MiniAppServer(application, BOT_TOKEN)
@@ -87,6 +93,10 @@ class TelegramBot:
             logger.warning("MINI_APP_URL не задан: используется прежнее меню бота")
 
     async def post_stop(self, application):
+        task = application.bot_data.pop("title_worker", None)
+        if task:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
         if self.mini_app_server:
             await self.mini_app_server.stop()
     
@@ -119,6 +129,8 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("order", order_command))
         self.application.add_handler(CommandHandler("guess", guess_command))
         self.application.add_handler(CommandHandler("mood", mood_command))
+        self.application.add_handler(CommandHandler("verdict", verdict_command))
+        self.application.add_handler(CommandHandler("titles", titles_command))
         # Before games handle (and possibly finish) a turn, so AI can skip active games.
         self.application.add_handler(MessageHandler(
             filters.ChatType.GROUPS & (filters.TEXT | filters.VOICE) & ~filters.COMMAND,
@@ -126,6 +138,7 @@ class TelegramBot:
         
         # Обработчик callback'ов от кнопок
         self.application.add_handler(CallbackQueryHandler(fun_callback, pattern=r"^fun:"))
+        self.application.add_handler(CallbackQueryHandler(titles_callback, pattern=r"^titles:"))
         self.application.add_handler(CallbackQueryHandler(handle_callback_query))
         
         # Обработчик FSM состояний (только для private чатов)

@@ -9,6 +9,7 @@ from commands.hall import halllist_command
 from commands.prediction import prediction_command
 from commands.roast_proof import proof_command, roast_command
 from commands.fun import passport_command, order_command, ded_command, guess_command, mood_command
+from commands.titles import verdict_command
 
 WORD_COMMANDS = {
     "котик": cat_command,
@@ -25,6 +26,7 @@ WORD_COMMANDS = {
     "дедометр": ded_command,
     "угадай": guess_command,
     "настроение": mood_command,
+    "вердикт": verdict_command,
 }
 WORD_ALIASES = {
     "котик": (
@@ -49,7 +51,7 @@ WORD_ALIASES = {
     ),
     "казино": ("казино", "казик", "слоты", "слот", "слотик", "слотики", "джекпот", "рулетка", "рулетку"),
     "бурмалда": ("бурмалда", "бурмалду", "бурмалды", "бурмалде", "бурмалдочка", "бурмалдочку"),
-    "слава": ("слава", "славу", "славы", "легенды", "легенда", "легенд", "позор", "кринж",
+    "слава": ("слава", "славу", "славы", "легенда", "легенду", "легендой", "легенды", "легенд", "позор", "кринж",
               "зал славы", "зал позора", "зал легенд"),
     "пруф": ("пруф", "пруфы", "пруфов", "пруфани", "докажи", "докажите", "доказательство",
              "доказательства", "подтверди", "подтвердите", "подтверждение"),
@@ -60,6 +62,8 @@ WORD_ALIASES = {
     "дедометр": ("дедометр",),
     "угадай": ("угадай песню",),
     "настроение": ("настроение бота", "настрой деда"),
+    "вердикт": ("гей", "гея", "гею", "геем", "гее", "геи", "геев", "геям", "геями", "геях",
+                "негр", "негра", "негру", "негром", "негре", "негры", "негров", "неграм", "неграми", "неграх"),
 }
 DRAW_ALIASES = (
     "нарисуй", "нарисуйте", "рисуй", "нарисовать", "изобрази", "изобразите", "намалюй",
@@ -78,12 +82,15 @@ def alias_pattern(aliases):
 
 WORD_PATTERN = alias_pattern(ALIAS_COMMANDS)
 DRAW_PATTERN = alias_pattern(DRAW_ALIASES)
+VERDICT_PATTERN = alias_pattern(WORD_ALIASES["вердикт"])
 
 
 def match_word_command(text):
     drawing = DRAW_PATTERN.search(text)
     if drawing:
         return "нарисуй", text[drawing.end():].lstrip(" \t\r\n,:—-")
+    if VERDICT_PATTERN.search(text):
+        return "вердикт", ""
     match = WORD_PATTERN.search(text)
     return (ALIAS_COMMANDS[" ".join(match.group().lower().split())], "") if match else None
 

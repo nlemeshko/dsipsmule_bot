@@ -39,7 +39,7 @@ def safe_command(handler):
             context.bot_data["fun_ready"] = True
         except Exception as exc:
             logger.warning("Community command %s failed: %s", handler.__name__, type(exc).__name__)
-            await update.effective_message.reply_text("Не удалось загрузить или сохранить данные. Попробуй позже — постоянную карточку заново не выдаю.")
+            await update.effective_message.reply_text("Не удалось загрузить или сохранить данные. Попробуй позже.")
     return run
 
 

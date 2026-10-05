@@ -52,7 +52,8 @@ class WordCommandTests(unittest.IsolatedAsyncioTestCase):
             await group_message(update, self.context)
 
     def test_whole_words_case_and_drawing_priority(self):
-        for text in ["котлета", "котировка", "мемный", "мемуары", "судьбоносный", "песочница", "пруфовый", "лохотрон"]:
+        for text in ["котлета", "котировка", "мемный", "мемуары", "судьбоносный", "песочница", "пруфовый", "лохотрон",
+                     "гейзер", "Сергей", "негритянский", "душнила"]:
             self.assertIsNone(match_word_command(text))
         self.assertEqual(match_word_command("Пришли МЕМ!"), ("мем", ""))
         self.assertEqual(match_word_command("Песня, а потом котик"), ("песня", ""))
@@ -61,6 +62,9 @@ class WordCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(match_word_command("Открой ЗАЛ \n СЛАВЫ!"), ("слава", ""))
         self.assertEqual(match_word_command("Кошка? СГЕНЕРИРУЙ \n КАРТИНКУ: Котёнок и мем."),
                          ("нарисуй", "Котёнок и мем."))
+        self.assertEqual(match_word_command("Котик, ну ты ГЕЙ!"), ("вердикт", ""))
+        self.assertEqual(match_word_command("Мем про негра"), ("вердикт", ""))
+        self.assertEqual(match_word_command("Нарисуй гея и негра"), ("нарисуй", "гея и негра"))
 
     async def test_synonyms_dispatch_to_same_commands_instead_of_ai(self):
         examples = {
@@ -70,9 +74,10 @@ class WordCommandTests(unittest.IsolatedAsyncioTestCase):
             "мем": ["мемас", "прикол"],
             "казино": ["казик", "слоты"],
             "бурмалда": ["бурмалду", "бурмалдочка"],
-            "слава": ["легенды", "зал славы"],
+            "слава": ["легенда", "легенду", "легендой", "легенды", "зал славы"],
             "пруф": ["пруфы", "подтверди"],
             "лох": ["лошара", "прожарь"],
+            "вердикт": [alias.upper() for alias in WORD_ALIASES["вердикт"]],
         }
         handlers = {word: AsyncMock() for word in examples}
         index = 0

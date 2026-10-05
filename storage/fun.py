@@ -42,6 +42,26 @@ def decode(content):
                     isinstance(card.get(field), str) and card[field]
                     for field in ("number", "name", "title", "issued", "detail"))):
                 raise ValueError("Invalid permanent card")
+        verdict = person.get("verdict")
+        if verdict is not None and (not isinstance(verdict, dict) or verdict.get("choice") not in {"legend", "bore"}
+                                    or not isinstance(verdict.get("name"), str) or not valid_time(verdict.get("until"))
+                                    or not valid_counts(verdict.get("counts"))):
+            raise ValueError("Invalid title verdict")
+    polls = state["community"].get("title_polls", {})
+    if not isinstance(polls, dict):
+        raise ValueError("Invalid title polls")
+    for token, poll in polls.items():
+        if (not isinstance(poll, dict) or poll.get("token") != token or not re.fullmatch(r"[0-9a-f]{12}", token)
+                or type(poll.get("chat_id")) is not int or poll["chat_id"] >= 0
+                or type(poll.get("source_id")) is not int or poll["source_id"] <= 0
+                or type(poll.get("message_id")) is not int or poll["message_id"] < 0
+                or not isinstance(poll.get("target"), str) or not re.fullmatch(r"-?[0-9]+", poll["target"])
+                or not isinstance(poll.get("name"), str) or not poll["name"] or len(poll["name"]) > 80
+                or not valid_time(poll.get("until")) or not isinstance(poll.get("votes"), dict)
+                or any(choice not in {"legend", "bore"} for choice in poll["votes"].values())
+                or type(poll.get("closed")) is not bool or type(poll.get("reported")) is not bool
+                or (poll["closed"] and poll.get("result") not in {"legend", "bore", "tie", "empty"})):
+            raise ValueError("Invalid title poll")
     ded = state["community"].get("ded")
     if ded is not None and (not isinstance(ded, dict) or type(ded.get("count")) is not int or ded["count"] < 0
                            or not isinstance(ded.get("seen"), list) or len(ded["seen"]) > 256
@@ -64,6 +84,11 @@ def decode(content):
 
 def valid_time(value):
     return type(value) in {int, float} and math.isfinite(value) and value > 0
+
+
+def valid_counts(value):
+    return (isinstance(value, dict) and set(value) == {"legend", "bore"}
+            and all(type(count) is int and count >= 0 for count in value.values()))
 
 
 def remote_storage():
