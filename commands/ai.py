@@ -79,13 +79,13 @@ def allowed_group(chat_id):
 
 def reply_probability():
     try:
-        value = float(os.getenv("AI_REPLY_PROBABILITY", "1.0"))
+        value = float(os.getenv("AI_REPLY_PROBABILITY", "0.1"))
         if 0 <= value <= 1:
             return value
     except ValueError:
         pass
-    logger.warning("Invalid AI_REPLY_PROBABILITY; using 1.0")
-    return 1.0
+    logger.warning("Invalid AI_REPLY_PROBABILITY; using 0.1")
+    return 0.1
 
 
 def replied_to_bot(message, bot):
@@ -93,6 +93,22 @@ def replied_to_bot(message, bot):
     author = getattr(original, "from_user", None)
     bot_id = getattr(bot, "id", None)
     return bool(author and bot_id is not None and author.id == bot_id)
+
+
+def replied_to_game(message, bot):
+    """Game prompts remain game messages even after a round ends or the bot restarts."""
+    if not replied_to_bot(message, bot):
+        return False
+    original = message.reply_to_message
+    text = getattr(original, "text", None) or getattr(original, "caption", None) or ""
+    if any(marker in text for marker in (
+            "Доступные буквы:", "Игра 'Поле чудес'", "Игра окончена. Чтобы начать новую игру",
+            "Угадай песню по эмодзи", "Новый раунд — /guess.")):
+        return True
+    markup = getattr(original, "reply_markup", None)
+    return bool(markup and any(
+        (button.callback_data or "").startswith("fun:guess:")
+        for row in markup.inline_keyboard for button in row))
 
 
 def permitted(update, context):
@@ -260,14 +276,18 @@ async def group_message(update, context):
     if (msg.text or "").startswith("/"):
         return
     from commands.word_commands import match_word_command, run_word_command
+    from commands.pole import pole_games
+    pole_active = any(game.get("chat_id") == msg.chat_id for game in pole_games.values())
+    guess_active = msg.chat_id in context.bot_data.get("fun_games_active", set())
+    game_reply = replied_to_game(msg, context.bot)
     word_command = match_word_command(msg.text)
-    if context.bot_data.get("fun_ready"):
+    if context.bot_data.get("fun_ready") and not (pole_active or guess_active or game_reply):
         from commands.fun import ambient_ded
         if await ambient_ded(update, context) and not word_command:
             from telegram.ext import ApplicationHandlerStop
             state.claim(msg.chat_id, msg.message_id)
             raise ApplicationHandlerStop
-    if msg.chat_id in context.bot_data.get("fun_games_active", set()):
+    if guess_active:
         from commands.fun import guess_reply
         if await guess_reply(update, context, automatic=True):
             from telegram.ext import ApplicationHandlerStop
@@ -278,26 +298,30 @@ async def group_message(update, context):
             await run_word_command(update, context, word_command)
         # Do not also comment with AI or treat the shortcut as a game guess.
         raise ApplicationHandlerStop
+    # Group -1 runs before the pole handler: leave the entire turn to the game,
+    # including a winning answer that quotes a bot message.
+    if (pole_active or game_reply
+            or msg.chat_id in context.bot_data.get("fun_games_active", set())):
+        return
     if not os.getenv("GROQ_API_KEY"):
         return
     replying = replied_to_bot(msg, context.bot)
-    direct = replying or bool(re.match(r"^\s*бот\b", msg.text, re.IGNORECASE))
-    if direct:
+    if replying:
         if not state.claim(msg.chat_id, msg.message_id):
             return
         prompt = msg.text
-        if replying:
-            original = msg.reply_to_message
-            quote = getattr(msg, "quote", None)
-            quoted_text = (getattr(quote, "text", None) or getattr(original, "text", None)
-                           or getattr(original, "caption", None))
-            if quoted_text:
-                prompt = ("Твоё предыдущее сообщение (цитата):\n" + quoted_text[:1200]
-                          + "\n\nНовое сообщение участника:\n" + msg.text)
+        original = msg.reply_to_message
+        quote = getattr(msg, "quote", None)
+        quoted_text = (getattr(quote, "text", None) or getattr(original, "text", None)
+                       or getattr(original, "caption", None))
+        if quoted_text:
+            prompt = ("Твоё предыдущее сообщение (цитата):\n" + quoted_text[:1200]
+                      + "\n\nНовое сообщение участника:\n" + msg.text)
         await answer(update, context, prompt, rate_limit=False)
         return
-    from commands.pole import pole_games
-    if any(game.get("chat_id") == msg.chat_id for game in pole_games.values()):
+    # Random comments start on standalone posts; other people's reply threads
+    # do not invite the bot to continue the conversation.
+    if msg.reply_to_message:
         return
     if not state.claim(msg.chat_id, msg.message_id):
         return

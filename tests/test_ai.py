@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from commands.ai import AIRuntime, answer, draw_command, group_message, private_audio, transcribe_command
+from commands.ai import AIRuntime, answer, draw_command, group_message, private_audio, reply_probability, transcribe_command
 from services.ai import AIClient, AIError
 
 
@@ -119,16 +119,29 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
                     update(message_id=21, text="Следующий пост"),
                     update(message_id=22, text="Другой участник")]
         messages[2].effective_user.id = 202
-        # The new default is 100% even without an explicit Secret setting.
-        with patch.dict("os.environ"):
-            import os
-            os.environ.pop("AI_REPLY_PROBABILITY", None)
+        # Explicit configuration can still change the probability.
+        with patch.dict("os.environ", {"AI_REPLY_PROBABILITY": "1.0"}):
             with patch("commands.ai.random.random", return_value=0.999):
                 for msg in messages:
                     await group_message(msg, self.context)
                     await group_message(msg, self.context)
                     msg.effective_message.reply_text.assert_awaited_once_with("Ответ Ведьмака")
         self.assertEqual(self.state.client.text.await_count, 3)
+
+    async def test_default_and_invalid_probability_use_ten_percent(self):
+        import os
+        with patch.dict(os.environ):
+            os.environ.pop("AI_REPLY_PROBABILITY", None)
+            self.assertEqual(reply_probability(), 0.1)
+            with patch("commands.ai.random.random", return_value=0.1):
+                await group_message(update(message_id=70), self.context)
+            self.state.client.text.assert_not_called()
+            with patch("commands.ai.random.random", return_value=0.099):
+                await group_message(update(message_id=71), self.context)
+            self.state.client.text.assert_awaited_once()
+            for value in ("invalid", "", "-1", "2", "nan", "inf"):
+                with self.subTest(value=value), patch.dict(os.environ, {"AI_REPLY_PROBABILITY": value}):
+                    self.assertEqual(reply_probability(), 0.1)
 
     async def test_zero_probability_disables_text_but_keeps_voice(self):
         file = SimpleNamespace(file_path="voice.oga", download_as_bytearray=AsyncMock(return_value=b"ogg"))
@@ -140,21 +153,58 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         self.state.client.text.assert_not_called()
         self.state.client.transcribe.assert_awaited_once_with(b"ogg", "voice.ogg")
 
-    async def test_bot_prefix_bypasses_probability_cooldowns_and_active_game(self):
+    async def test_bot_prefix_does_not_bypass_probability_or_active_game(self):
         from commands.pole import pole_games
         pole_games[101] = {"chat_id": -1001}
         self.state.throttle("text", -1001, 15, group=True)
         self.state.throttle("text", 101, 5)
-        with patch.dict("os.environ", {"AI_REPLY_PROBABILITY": "0"}), patch("commands.ai.random.random", return_value=0.99):
+        with patch.dict("os.environ", {"AI_REPLY_PROBABILITY": "0.1"}), patch("commands.ai.random.random", return_value=0.99):
             for index, text in enumerate(["Бот, объясни", "бот помоги", "  БОТ!", "Бот"]):
                 msg = update(message_id=30 + index, text=text)
                 await group_message(msg, self.context)
                 await group_message(msg, self.context)
-                msg.effective_message.reply_text.assert_awaited_once_with("Ответ Ведьмака")
+                msg.effective_message.reply_text.assert_not_awaited()
             pole_games.clear()
-            for index, text in enumerate(["Ботинок", "Ботаника", "Привет, Бот"]):
+            for index, text in enumerate(["Ботинок", "Ботаника", "Привет, Бот", "Бот, объясни"]):
                 await group_message(update(message_id=40 + index, text=text), self.context)
-        self.assertEqual(self.state.client.text.await_count, 4)
+        self.state.client.text.assert_not_called()
+
+    async def test_quoted_pole_letter_and_winning_word_only_reach_the_game(self):
+        from commands.pole import pole_games, handle_pole_message
+        pole_games[101] = {"chat_id": -1001, "word": "эхинацея", "guessed_letters": set(),
+                           "used_letters": set(), "bot_message_ids": []}
+        self.context.bot.delete_message = AsyncMock()
+        original = SimpleNamespace(from_user=SimpleNamespace(id=9001, is_bot=True),
+                                   message_id=5, text="✅ Верно! Буква есть в слове.\n\nСлово: _ х и н а ц е я\n\nДоступные буквы: ...")
+        with patch("commands.pole.asyncio.sleep", new=AsyncMock()), \
+                patch("commands.pole.build_binary_stream", return_value=None), \
+                patch("commands.ai.random.random", return_value=0):
+            for index, text in enumerate(["е", "эхинацея"]):
+                msg = update(message_id=80 + index, text=text, reply_to_message=original)
+                msg.message.reply_text.side_effect = [SimpleNamespace(message_id=90), SimpleNamespace(message_id=91)]
+                await group_message(msg, self.context)
+                msg.message.reply_text.assert_not_awaited()
+                await handle_pole_message(msg, self.context)
+                self.assertEqual(msg.message.reply_text.await_count, 2)
+        self.assertIn("Поздравляем", msg.message.reply_text.call_args.args[0])
+        self.assertNotIn(101, pole_games)
+        self.state.client.text.assert_not_called()
+
+    async def test_old_game_quotes_do_not_start_ai_after_game_ends_or_restart(self):
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        texts = ["🎯 Игра 'Поле чудес' началась!", "Слово: _ х\nДоступные буквы: ...",
+                 "Игра окончена. Чтобы начать новую игру, используйте команду /pole",
+                 "🎵 Угадай песню по эмодзи", "🏳 Это «Кукушка». Новый раунд — /guess."]
+        originals = [SimpleNamespace(from_user=SimpleNamespace(id=9001), text=text) for text in texts]
+        originals.append(SimpleNamespace(
+            from_user=SimpleNamespace(id=9001), text="💡 Подсказка: Кино",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Сдаться", callback_data="fun:guess:-1001:token:end")]])))
+        with patch("commands.ai.random.random", return_value=0):
+            for index, original in enumerate(originals):
+                msg = update(message_id=100 + index, text="эхинацея", reply_to_message=original)
+                await group_message(msg, self.context)
+                msg.message.reply_text.assert_not_awaited()
+        self.state.client.text.assert_not_called()
 
     async def test_reply_to_this_bot_includes_quote_and_answers_once_at_zero_probability(self):
         original = SimpleNamespace(from_user=SimpleNamespace(id=9001, is_bot=True),
@@ -172,11 +222,12 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.state.client.text.await_count, 2)
 
     async def test_replies_to_other_authors_and_plain_quotes_are_not_direct_requests(self):
-        with patch.dict("os.environ", {"AI_REPLY_PROBABILITY": "0"}):
+        with patch.dict("os.environ", {"AI_REPLY_PROBABILITY": "1"}), patch("commands.ai.random.random", return_value=0):
             for index, author in enumerate([SimpleNamespace(id=202, is_bot=False),
                                             SimpleNamespace(id=9002, is_bot=True), None]):
                 original = SimpleNamespace(from_user=author, text="Бот, привет")
                 await group_message(update(message_id=60 + index, text="Почему?", reply_to_message=original), self.context)
+        with patch.dict("os.environ", {"AI_REPLY_PROBABILITY": "0"}):
             await group_message(update(message_id=63, text="«Ответ бота»", quote=SimpleNamespace(text="Ответ бота")), self.context)
         self.state.client.text.assert_not_called()
 
@@ -268,7 +319,7 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
                 msg.effective_user = SimpleNamespace(id=136817688, is_bot=True)
                 await group_message(msg, self.context)
                 msg.effective_message.reply_text.assert_awaited_once()
-            # Addressing and quoting work even when selection/cooldowns would skip.
+            # Only quoting invites a reply when random selection/cooldowns skip.
             with patch("commands.ai.random.random", return_value=0.99):
                 for index, (text, reply) in enumerate([("Бот как твои дела?", None), ("Почему?", original)]):
                     msg = update(chat_id=group_id, message_id=20 + index, text=text,
@@ -276,8 +327,11 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
                     msg.effective_user = None
                     await group_message(msg, self.context)
                     await group_message(msg, self.context)
-                    msg.effective_message.reply_text.assert_awaited_once()
-        self.assertEqual(self.state.client.text.await_count, 3)
+                    if reply:
+                        msg.effective_message.reply_text.assert_awaited_once()
+                    else:
+                        msg.effective_message.reply_text.assert_not_awaited()
+        self.assertEqual(self.state.client.text.await_count, 2)
 
     async def test_every_group_voice_is_transcribed_regardless_of_sender_or_active_game(self):
         from commands.pole import pole_games

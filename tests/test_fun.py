@@ -202,6 +202,17 @@ class FunRoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("угадано", correct.message.reply_text.call_args.args[0])
         self.assertNotIn(-1001, self.context.bot_data["fun_games_active"])
 
+    async def test_active_song_game_suppresses_ai_on_chatter_and_non_game_quotes(self):
+        await guess_command(update(text="/guess"), self.context)
+        original = SimpleNamespace(from_user=SimpleNamespace(id=9001), text="Ответ нейросети")
+        with patch("commands.ai.random.random", return_value=0):
+            for index, (text, reply) in enumerate([
+                    ("Привет всем", None), ("Бот, объясни", None), ("Почему?", original)]):
+                msg = update(message_id=120 + index, text=text, reply_to_message=reply)
+                await group_message(msg, self.context)
+                msg.message.reply_text.assert_not_awaited()
+        self.state.client.text.assert_not_called()
+
     async def test_group_quiz_does_not_change_the_same_users_private_game_mode(self):
         private = update(chat_id=101, chat_type="private", text="/guess")
         await guess_command(private, self.context)
