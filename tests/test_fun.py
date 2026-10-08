@@ -11,9 +11,10 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from botocore.exceptions import ClientError
+from telegram.error import BadRequest
 from telegram.ext import ApplicationHandlerStop
 from commands.ai import AIRuntime, answer, group_message
-from commands.fun import ded_command, passport_command, order_command, guess_command, guess_reply, fun_callback
+from commands.fun import ded_command, passport_command, order_command, guess_command, guess_reply, mood_command, fun_callback
 from services import fun
 from storage import fun as storage
 from test_ai import update
@@ -78,7 +79,7 @@ class DurableFunTests(unittest.TestCase):
             fun.vote_mood(101, mood["token"], "tired")
             fun.vote_mood(101, mood["token"], "tired")
             result = fun.vote_mood(101, mood["token"], "lyutik")
-            self.assertEqual(result["counts"], {"angry": 0, "tired": 0, "lyutik": 1})
+            self.assertEqual(result["counts"], {mode: int(mode == "lyutik") for mode in fun.MOODS})
             storage.state_path().unlink()
             self.assertEqual(fun.open_mood()["token"], mood["token"])
             self.assertIn("микрофона", fun.mood_instruction())
@@ -87,6 +88,38 @@ class DurableFunTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 fun.vote_mood(101, mood["token"], "tired")
             self.assertNotEqual(fun.open_mood()["token"], mood["token"])
+
+    def test_every_mood_survives_remote_reload_and_changes_the_ai_instruction(self):
+        mood = fun.open_mood()
+        for mode, (_, instruction) in fun.MOODS.items():
+            with self.subTest(mode=mode):
+                result = fun.vote_mood(101, mood["token"], mode)
+                self.assertEqual(result["mode"], mode)
+                self.assertEqual(sum(result["counts"].values()), 1)
+                storage.state_path().unlink()
+                fun.invalidate_mood()
+                self.assertEqual(fun.open_mood()["votes"], {"101": mode})
+                self.assertEqual(fun.mood_instruction(), instruction)
+        with self.assertRaises(ValueError):
+            fun.vote_mood(101, mood["token"], "unknown")
+
+    def test_guess_does_not_repeat_the_previous_song_and_accepts_every_catalogue_answer(self):
+        self.assertGreaterEqual(len(fun.RIDDLES), 60)
+        answers = [fun.normalize_answer(answer) for _, answer, _ in fun.RIDDLES]
+        self.assertEqual(len(answers), len(set(answers)))
+        for riddle in fun.RIDDLES:
+            with self.subTest(answer=riddle[1]):
+                with patch("services.fun.random.choice", return_value=riddle):
+                    game = fun.start_guess(-1001)
+                self.assertEqual(game["emoji"], riddle[0])
+                self.assertEqual(fun.guess_button(-1001, game["token"], "hint")["hint"], riddle[2])
+                result = fun.solve_guess(-1001, game["answer"].upper().replace("Ё", "Е"), 101, "Тест")
+                self.assertEqual(result["status"], "won")
+                with patch("services.fun.random.choice", side_effect=lambda choices: choices[0]) as choice:
+                    following = fun.start_guess(-1001)
+                self.assertNotIn(riddle, choice.call_args.args[0])
+                self.assertNotEqual(following["answer"], game["answer"])
+                fun.guess_button(-1001, following["token"], "end")
 
     def test_guess_persists_and_has_one_winner_without_modifying_passport(self):
         passport = fun.permanent_card(101, "Никита", "passport")
@@ -196,6 +229,56 @@ class FunRoutingTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("fun_guess", self.context.user_data)
         finally:
             pole_games.pop(101, None)
+
+    async def test_mood_votes_update_the_poll_without_sending_new_messages(self):
+        for chat_id, chat_type in [(-1001, "supergroup"), (101, "private")]:
+            with self.subTest(chat_type=chat_type):
+                command = update(chat_id=chat_id, chat_type=chat_type, text="/mood")
+                await mood_command(command, self.context)
+                command.message.reply_text.assert_awaited_once()
+                markup = command.message.reply_text.call_args.kwargs["reply_markup"]
+                message = SimpleNamespace(reply_text=AsyncMock(), edit_text=AsyncMock())
+                callback = SimpleNamespace(
+                    callback_query=SimpleNamespace(data="", answer=AsyncMock()),
+                    effective_chat=command.effective_chat, effective_user=command.effective_user,
+                    effective_message=message,
+                )
+                for index in [1, 2]:
+                    callback.callback_query.data = markup.inline_keyboard[index][0].callback_data
+                    callback.callback_query.answer.reset_mock()
+                    await fun_callback(callback, self.context)
+                    callback.callback_query.answer.assert_awaited_once_with("Голос учтён")
+                self.assertEqual(message.edit_text.await_count, 2)
+                text = message.edit_text.call_args.args[0]
+                self.assertIn("Сейчас: Лютик украл микрофон", text)
+                self.assertIn("После репетиции: 0 голосов", text)
+                self.assertIn("Лютик украл микрофон: 1 голосов", text)
+                self.assertEqual(message.edit_text.call_args.kwargs["reply_markup"], markup)
+                message.reply_text.assert_not_awaited()
+                self.assertEqual(fun.open_mood()["votes"], {"101": "lyutik"})
+
+    async def test_repeated_mood_vote_ignores_only_unchanged_message_errors(self):
+        mood = fun.open_mood()
+        fun.vote_mood(101, mood["token"], "tired")
+        message = SimpleNamespace(reply_text=AsyncMock(), edit_text=AsyncMock())
+        callback = SimpleNamespace(
+            callback_query=SimpleNamespace(data=f"fun:mood:{mood['token']}:tired", answer=AsyncMock()),
+            effective_chat=SimpleNamespace(id=-1001, type="supergroup"),
+            effective_message=message, effective_user=SimpleNamespace(id=101),
+        )
+        message.edit_text.side_effect = BadRequest("Message is not modified")
+        await fun_callback(callback, self.context)
+        callback.callback_query.answer.assert_awaited_once_with("Голос учтён")
+        self.assertEqual(fun.open_mood()["counts"]["tired"], 1)
+        message.reply_text.assert_not_awaited()
+
+        callback.callback_query.answer.reset_mock()
+        message.edit_text.side_effect = BadRequest("Message to edit not found")
+        await fun_callback(callback, self.context)
+        self.assertEqual(callback.callback_query.answer.await_count, 2)
+        callback.callback_query.answer.assert_awaited_with(
+            "Не удалось сохранить действие. Попробуй позже.", show_alert=True)
+        message.reply_text.assert_not_awaited()
 
     async def test_mood_changes_actual_ai_prompt_and_callback_cannot_target_other_private_game(self):
         mood = fun.open_mood()

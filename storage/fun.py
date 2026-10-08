@@ -11,6 +11,7 @@ from threading import RLock
 
 from botocore.exceptions import ClientError
 from storage.hall import BASE, s3_storage
+from services.fun_catalog import MOODS
 
 LOCK = RLock()
 MAX_STATE = 4 * 1024 * 1024
@@ -70,8 +71,8 @@ def decode(content):
     mood = state["community"].get("mood")
     if mood is not None and (not isinstance(mood, dict) or not isinstance(mood.get("token"), str)
                             or not valid_time(mood.get("until")) or not isinstance(mood.get("votes"), dict)
-                            or mood.get("mode") not in {"angry", "tired", "lyutik"}
-                            or any(mode not in {"angry", "tired", "lyutik"} for mode in mood["votes"].values())):
+                            or mood.get("mode") not in MOODS
+                            or any(mode not in MOODS for mode in mood["votes"].values())):
         raise ValueError("Invalid mood vote")
     for chat_id, game in state["games"].items():
         if (not re.fullmatch(r"-?[0-9]+", chat_id) or not isinstance(game, dict)

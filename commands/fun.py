@@ -7,6 +7,7 @@ import time
 from functools import wraps
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import BadRequest
 from services import fun
 
 logger = logging.getLogger(__name__)
@@ -94,12 +95,20 @@ def mood_markup(mood):
                                  for mode, (name, _) in fun.MOODS.items()])
 
 
-async def show_mood(message, mood):
+async def show_mood(message, mood, *, edit=False):
     lines = ["🎭 Общее настроение Ведьмака", f"Сейчас: {fun.MOODS[mood['mode']][0]}",
              f"До конца раунда: {max(1, int((mood['until'] - time.time()) / 60))} мин."]
     lines += [f"{name}: {mood['counts'][mode]} голосов" for mode, (name, _) in fun.MOODS.items()]
     lines.append("Один голос на участника во всех чатах. Можно поменять свой выбор. Настроение меняется по лидеру голосования.")
-    await message.reply_text("\n".join(lines), reply_markup=mood_markup(mood))
+    if edit:
+        try:
+            await message.edit_text("\n".join(lines), reply_markup=mood_markup(mood))
+        except BadRequest as exc:
+            # Voting for the same option can leave both text and buttons unchanged.
+            if "message is not modified" not in str(exc).lower():
+                raise
+    else:
+        await message.reply_text("\n".join(lines), reply_markup=mood_markup(mood))
 
 
 @safe_command
@@ -197,7 +206,8 @@ async def fun_callback(update, context):
             uid = update.effective_user.id
             mood = await asyncio.to_thread(fun.vote_mood, uid, parts[2], parts[3])
             await query.answer("Голос учтён")
-            await show_mood(update.effective_message, mood)
+            # Mini App actions replace their visible result through reply_text.
+            await show_mood(update.effective_message, mood, edit=not getattr(context, "is_miniapp", False))
         elif len(parts) == 5 and parts[:2] == ["fun", "guess"] and int(parts[2]) == chat.id:
             game = await asyncio.to_thread(fun.guess_button, chat.id, parts[3], parts[4])
             await query.answer()
