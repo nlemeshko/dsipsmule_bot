@@ -82,7 +82,7 @@ class DurableFunTests(unittest.TestCase):
             self.assertEqual(result["counts"], {mode: int(mode == "lyutik") for mode in fun.MOODS})
             storage.state_path().unlink()
             self.assertEqual(fun.open_mood()["token"], mood["token"])
-            self.assertIn("микрофона", fun.mood_instruction())
+            self.assertEqual(fun.mood_instruction(), fun.MOODS["lyutik"][1])
         with patch("services.fun.time.time", return_value=4601):
             self.assertEqual(fun.mood_instruction(), "")
             with self.assertRaises(ValueError):

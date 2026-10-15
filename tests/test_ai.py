@@ -215,9 +215,9 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
                 await group_message(msg, self.context)
                 await group_message(msg, self.context)
                 expected = quote.text if quote else original.text
-                self.state.client.text.assert_awaited_with(
+                self.assertEqual(self.state.client.text.call_args.args, (
                     "Твоё предыдущее сообщение (цитата):\n" + expected
-                    + "\n\nНовое сообщение участника:\nПочему?")
+                    + "\n\nНовое сообщение участника:\nПочему?",))
                 msg.effective_message.reply_text.assert_awaited_once()
         self.assertEqual(self.state.client.text.await_count, 2)
 
@@ -417,6 +417,52 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         self.state.users.clear()
         await answer(msg, self.context, "вопрос")
         msg.effective_message.reply_text.assert_awaited_once_with("Лимит нейросети исчерпан.")
+
+    async def test_recent_replies_reach_next_request_without_crossing_chats_or_topics(self):
+        from services.ai import SYSTEM_PROMPT
+        msg = update(message_thread_id=7)
+        self.state.client.text.return_value = "Опять про микрофон — уже было."
+        await answer(msg, self.context, "Первое сообщение", rate_limit=False)
+        self.state.client.text.assert_awaited_once_with("Первое сообщение")
+        self.state.client.text.return_value = "Давай по делу."
+        await answer(msg, self.context, "Второе сообщение", rate_limit=False)
+        call = self.state.client.text.call_args
+        self.assertEqual(call.args, ("Второе сообщение",))
+        self.assertTrue(call.kwargs["system_prompt"].startswith(SYSTEM_PROMPT))
+        recent = json.loads(call.kwargs["system_prompt"].split("(JSON):\n", 1)[1])
+        self.assertEqual(recent, ["Опять про микрофон — уже было."])
+        for other in [update(message_thread_id=8), update(chat_id=-1002, message_thread_id=7),
+                      update(chat_id=101, chat_type="private")]:
+            await answer(other, self.context, "Отдельный разговор", rate_limit=False)
+            self.assertEqual(self.state.client.text.call_args.kwargs, {})
+
+    async def test_unsent_replies_and_api_errors_are_not_remembered(self):
+        msg = update()
+        self.state.client.text.side_effect = AIError("Лимит")
+        await answer(msg, self.context, "Вопрос", rate_limit=False)
+        self.assertEqual(self.state.recent_replies((-1001, None)), [])
+        self.state.client.text.side_effect = None
+        msg.message.reply_text.side_effect = RuntimeError("Telegram недоступен")
+        with self.assertRaises(RuntimeError):
+            await answer(msg, self.context, "Вопрос", rate_limit=False)
+        self.assertEqual(self.state.recent_replies((-1001, None)), [])
+
+
+class ReplyMemoryTests(unittest.TestCase):
+    def test_memory_expires_and_has_bounded_reply_and_chat_sizes(self):
+        state = AIRuntime()
+        with patch("commands.ai.time.monotonic", return_value=100):
+            for index in range(10):
+                state.remember_reply((101, None), str(index) * 500)
+            recent = state.recent_replies((101, None))
+            self.assertEqual(len(recent), 6)
+            self.assertEqual(recent[0], "4" * 400)
+        with patch("commands.ai.time.monotonic", return_value=1900):
+            self.assertEqual(state.recent_replies((101, None)), [])
+        for index in range(200):
+            state.remember_reply((-index, None), "Ответ")
+        self.assertEqual(len(state.replies), 128)
+        self.assertEqual(state.recent_replies((101, None)), [])
 
 
 class ProviderTests(unittest.IsolatedAsyncioTestCase):

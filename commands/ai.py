@@ -1,15 +1,16 @@
 """AI entry points with strict new-message gating for Telegram updates."""
 
+import json
 import logging
 import os
 import random
 import re
 import time
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from io import BytesIO
 from pathlib import Path
 
-from services.ai import AIClient, AIError, MAX_AUDIO
+from services.ai import AIClient, AIError, MAX_AUDIO, SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 TRANSCRIBE_STATE = "ai_waiting_audio"
@@ -38,6 +39,19 @@ class AIRuntime:
         self.seen = OrderedDict()
         self.users = OrderedDict()
         self.groups = OrderedDict()
+        self.replies = OrderedDict()
+
+    def recent_replies(self, scope):
+        now = time.monotonic()
+        entries = self.replies.get(scope, ())
+        return [text for created_at, text in entries if now - created_at < 1800]
+
+    def remember_reply(self, scope, text):
+        entries = self.replies.setdefault(scope, deque(maxlen=6))
+        entries.append((time.monotonic(), text[:400]))
+        self.replies.move_to_end(scope)
+        while len(self.replies) > 128:
+            self.replies.popitem(last=False)
 
     def is_new(self, update):
         msg = update.message
@@ -139,6 +153,8 @@ async def answer(update, context, prompt, *, quiet=False, rate_limit=True):
             await update.effective_message.reply_text("Подождите 5 секунд перед следующим вопросом.")
         return
     try:
+        scope = (update.effective_chat.id, getattr(update.effective_message, "message_thread_id", None))
+        system_prompt = SYSTEM_PROMPT
         instruction = ""
         if context.bot_data.get("fun_ready"):
             from services.fun import mood_instruction
@@ -148,11 +164,16 @@ async def answer(update, context, prompt, *, quiet=False, rate_limit=True):
             except Exception as exc:
                 logger.warning("Mood unavailable: %s", type(exc).__name__)
         if instruction:
-            from services.ai import SYSTEM_PROMPT
-            text = await state.client.text(prompt, system_prompt=SYSTEM_PROMPT + " Настроение на этот час: " + instruction)
+            system_prompt += " Настроение на этот час (только тон ответа): " + instruction
+        recent = state.recent_replies(scope)
+        if recent:
+            system_prompt += "\nНедавние реплики для проверки повторов (JSON):\n" + json.dumps(recent, ensure_ascii=False)
+        if system_prompt != SYSTEM_PROMPT:
+            text = await state.client.text(prompt, system_prompt=system_prompt)
         else:
             text = await state.client.text(prompt)
         await reply_text(update.effective_message, text)
+        state.remember_reply(scope, text)
     except AIError as exc:
         logger.warning("AI text unavailable: %s", exc)
         if not quiet:
