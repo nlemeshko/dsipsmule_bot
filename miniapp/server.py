@@ -16,6 +16,7 @@ from aiohttp import web
 from miniapp.auth import validate_init_data
 from miniapp.bridge import AppBot, AppContext, make_update
 from miniapp.locks import user_lock
+from miniapp import site
 
 logger = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "static"
@@ -114,12 +115,17 @@ class MiniAppServer:
             web.post("/api/upload", self.upload), web.get("/api/media/{key}", self.media_response),
             web.get("/app.js", self.static), web.get("/styles.css", self.static),
             web.get("/assets/{name}", self.artwork),
+            web.get("/site-api/bootstrap", self.bootstrap), web.post("/site-api/action", self.action),
+            web.post("/site-api/upload", self.upload), web.get("/site-api/media/{key}", self.media_response),
+            web.get("/site-api/community", site.community), web.post("/site-api/vote/{token}", site.vote),
         ])
 
     @web.middleware
     async def guard(self, request, handler):
         try:
-            if request.path.startswith("/api/"):
+            if request.path.startswith("/site-api/"):
+                request["user"] = site.website_user(request)
+            elif request.path.startswith("/api/"):
                 request["user"] = validate_init_data(
                     request.headers.get("X-Telegram-Init-Data", ""), self.token,
                     max_age=int(os.getenv("MINI_APP_AUTH_MAX_AGE", "3600")),
@@ -256,6 +262,11 @@ class MiniAppServer:
             context = AppContext(self.application, bot, user["id"])
             attachment = None
             user_entry = None
+            if user.get("website"):
+                if action == "command" and (not isinstance(body.get("command"), str) or body["command"] not in site.COMMANDS):
+                    raise ValueError("Команда недоступна на сайте")
+                if action == "callback" and isinstance(body.get("callback"), str) and body["callback"] in PRIMARY_CALLBACKS - site.CALLBACKS:
+                    raise ValueError("Команда недоступна на сайте")
             if upload:
                 kind, stream = upload
                 state = user_states.get(user["id"])
@@ -265,6 +276,27 @@ class MiniAppServer:
                 while len(session.requests) > 100:
                     session.requests.popitem(last=False)
                 session.last_action = time.monotonic()
+                if user.get("website"):
+                    from commands.admin_notifications import get_admin_ids
+                    if not (recipients := get_admin_ids()):
+                        raise ValueError("Модерация вложений сейчас недоступна")
+                    delivered = False
+                    for recipient in recipients:
+                        try:
+                            stream.seek(0)
+                            await getattr(self.application.bot, f"send_{kind}")(
+                                chat_id=recipient, **{kind: stream},
+                                caption=f"Анонимка с сайта · {user['username']}\n\n{text[:800]}",
+                            )
+                            delivered = True
+                        except Exception:
+                            logger.warning("Failed to deliver website attachment to a moderator", exc_info=True)
+                    if not delivered:
+                        raise ValueError("Не удалось отправить вложение модераторам")
+                    user_states.pop(user["id"], None)
+                    session.history.clear()
+                    await bot.send_message(user["id"], "Вложение отправлено на модерацию.")
+                    return web.json_response(self.result(user, session))
                 # Telegram registers file_id for existing moderation and S3 workflows.
                 attachment = await getattr(self.application.bot, f"send_{kind}")(
                     chat_id=user["id"], **{kind: stream}, caption=text[:1024] or None,
