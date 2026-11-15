@@ -6,3 +6,5 @@
 footer a{display:inline-block;color:var(--accent);text-decoration:none;margin-top:10px;font-size:11px;letter-spacing:.5px}.brand-mark{font-family:Georgia,serif;font-size:26px;line-height:37px}.brand small{font-size:7px}.eyebrow{color:#b89357}h1 em{color:#dfba70}.hero-link{color:#e2bf7c}.intro{position:relative}.card-icon{color:#e0ba71}.primary:hover{filter:brightness(1.08)}.shell{padding-top:calc(22px + max(env(safe-area-inset-top),var(--tg-content-safe-area-inset-top,0px)))}
 
 .feature-image{display:block;width:100%;max-height:280px;object-fit:contain;border-radius:16px;margin:20px 0;background:var(--surface);border:1px solid var(--line)}
+
+.card.linked-activity { outline: 2px solid #deb87a; outline-offset: 2px; scroll-margin: 72px }

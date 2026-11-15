@@ -1,6 +1,8 @@
 """Open the club Mini App, with a compact fallback menu."""
 
 import os
+import re
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import ContextTypes
 
@@ -11,6 +13,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     app_url = os.getenv("MINI_APP_URL", "").strip()
     private = update.effective_chat.type == "private"
     if app_url and private:
+        payload = context.args[0] if context.args else ""
+        match = re.fullmatch(r"activity_([a-z]{1,24})", payload)
+        if match:
+            parts = urlsplit(app_url)
+            params = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True) if key != "activity"]
+            app_url = urlunsplit(parts._replace(query=urlencode([*params, ("activity", match[1])])))
         rows = [[InlineKeyboardButton("Открыть приложение Ведьмака ↗", web_app=WebAppInfo(app_url))]]
         text = (
             "🗡️ Ведьмак на связи. Добро пожаловать в DSIP Smule!\n\n"

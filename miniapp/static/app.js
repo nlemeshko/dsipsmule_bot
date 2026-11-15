@@ -190,6 +190,7 @@ async function perform(body, file = null) {
 }
 for (const [section, items] of Object.entries(catalog)) for (const item of items) {
   const card = document.createElement("button"); card.type = "button"; card.className = "card";
+  card.dataset.activity = item[0];
   card.dataset.feature = item[0];
   const icon = document.createElement("span"); icon.className = "card-icon"; icon.textContent = item[1]; icon.style.setProperty("--tint", item[4]);
   const arrow = document.createElement("span"); arrow.className = "card-arrow"; arrow.textContent = "↗";
@@ -218,6 +219,13 @@ for (const link of document.querySelectorAll('a[href="https://dsipsmule.one"]'))
 }
 document.querySelectorAll(".bottom-nav button").forEach(b => b.addEventListener("click", () => showHome(b.dataset.section)));
 async function boot() {
+  const activity = new URLSearchParams(location.search).get("activity");
+  const card = [...document.querySelectorAll("[data-activity]")].find(button => button.dataset.activity === activity);
+  if (card) {
+    card.classList.add("linked-activity");
+    card.focus({preventScroll: true});
+    card.scrollIntoView({block: "center"});
+  }
   if (!tg?.initData) return notice("Предпросмотр приложения. Для действий откройте его через Telegram-бота.");
   try {
     data = await (await api("/api/bootstrap")).json(); authenticated = true;
