@@ -173,7 +173,6 @@ async function perform(body, file = null) {
   if (pending) return false;
   if (!authenticated) { notice("Откройте приложение кнопкой в чате с ботом, чтобы пользоваться функциями."); return false; }
   pending = true; $("busy").hidden = false; notice("");
-  data = {...data, messages: []}; renderMessages();
   document.querySelectorAll("button").forEach(b => b.disabled = true);
   try {
     const requestId = crypto.randomUUID();
@@ -220,18 +219,23 @@ for (const link of document.querySelectorAll('a[href="https://dsipsmule.one"]'))
 document.querySelectorAll(".bottom-nav button").forEach(b => b.addEventListener("click", () => showHome(b.dataset.section)));
 async function boot() {
   const activity = new URLSearchParams(location.search).get("activity");
-  const card = [...document.querySelectorAll("[data-activity]")].find(button => button.dataset.activity === activity);
-  if (card) {
-    card.classList.add("linked-activity");
-    card.focus({preventScroll: true});
-    card.scrollIntoView({block: "center"});
+  const item = Object.values(catalog).flat().find(item => item[0] === activity);
+  if (!tg?.initData) {
+    if (item) {
+      const card = document.querySelector(`[data-activity="${item[0]}"]`);
+      card.classList.add("linked-activity");
+      card.focus({preventScroll: true});
+      card.scrollIntoView({block: "center"});
+    }
+    notice("Предпросмотр приложения. Для действий откройте его через Telegram-бота.");
+    return;
   }
-  if (!tg?.initData) return notice("Предпросмотр приложения. Для действий откройте его через Telegram-бота.");
   try {
     data = await (await api("/api/bootstrap")).json(); authenticated = true;
     $("greeting").textContent = `${data.user.first_name}, пой, делись и будь частью сообщества.`;
     $("avatar").textContent = data.user.first_name.slice(0, 1).toUpperCase();
-    if (data.state || data.playing || data.guessing) showWorkspace(["resume", "", "Продолжить", "Твой незавершённый контракт. Продолжи с текущего шага."]);
+    if (item) await openItem(item);
+    else if (data.state || data.playing || data.guessing) showWorkspace(["resume", "", "Продолжить", "Твой незавершённый контракт. Продолжи с текущего шага."]);
   } catch (error) { notice(error.message); }
 }
 boot();
