@@ -80,6 +80,16 @@ def _own_links(entries, user_id):
     return [url for url, entry in entries.items() if entry["telegram_id"] == user_id]
 
 
+def _save(client, bucket, entries):
+    content = json.dumps(entries, ensure_ascii=False).encode("utf-8")
+    if len(content) > MAX_BYTES:
+        raise ContestStorageError("Contest submissions exceed the storage limit")
+    try:
+        client.put_object(Bucket=bucket, Key=KEY, Body=content, ContentType="application/json")
+    except (BotoCoreError, ClientError) as exc:
+        raise ContestStorageError("Cannot write contest submissions") from exc
+
+
 def user_links(user_id):
     return _own_links(_read(*_storage()), user_id)
 
@@ -110,11 +120,16 @@ def submit(user, url, received_at):
             "submitted_at": received_at.isoformat(timespec="seconds"),
             "rules_version": 1,
         }
-        content = json.dumps(entries, ensure_ascii=False).encode("utf-8")
-        if len(content) > MAX_BYTES:
-            raise ContestStorageError("Contest submissions exceed the storage limit")
-        try:
-            client.put_object(Bucket=bucket, Key=KEY, Body=content, ContentType="application/json")
-        except (BotoCoreError, ClientError) as exc:
-            raise ContestStorageError("Cannot write contest submission") from exc
+        _save(client, bucket, entries)
         return _own_links(entries, user["id"])
+
+
+def remove(user_id, url):
+    with LOCK:
+        client, bucket = _storage()
+        entries = _read(client, bucket)
+        entry = entries.get(url)
+        if entry and entry["telegram_id"] == user_id:
+            del entries[url]
+            _save(client, bucket, entries)
+        return _own_links(entries, user_id)

@@ -114,6 +114,7 @@ class MiniAppServer:
             web.get("/api/bootstrap", self.bootstrap), web.post("/api/action", self.action),
             web.post("/api/upload", self.upload), web.get("/api/media/{key}", self.media_response),
             web.get("/api/thanksgiving", thanksgiving.status), web.post("/api/thanksgiving", thanksgiving.submit),
+            web.delete("/api/thanksgiving", thanksgiving.remove),
             web.get("/app.js", self.static), web.get("/styles.css", self.static),
             web.get("/assets/{name}", self.artwork),
             web.get("/site-api/bootstrap", self.bootstrap), web.post("/site-api/action", self.action),

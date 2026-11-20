@@ -131,13 +131,26 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(result.status, 200)
                 result = await restarted.post(path, json={"url": url.replace("67890", "67892"), "accepted_rules": True}, headers=self.headers)
                 self.assertEqual(result.status, 409)
-            self.assertEqual({entry["telegram_id"] for entry in thanksgiving.all_entries()}, {101, 202})
+                self.assertEqual((await restarted.delete(path, json={"url": url})).status, 401)
+                self.assertEqual((await restarted.delete(path, json=[], headers=self.headers)).status, 400)
+                foreign = await restarted.delete(path, json={"url": url}, headers=other)
+                self.assertEqual(foreign.status, 200)
+                self.assertIn(url, (await (await restarted.get(path, headers=self.headers)).json())["links"])
+                for _ in range(2):
+                    result = await restarted.delete(path, json=same_recording, headers=self.headers)
+                    self.assertEqual(result.status, 200)
+                    self.assertEqual(await result.json(), {"open": False, "links": []})
+            async with TestClient(TestServer(MiniAppServer(self.application, TOKEN).app)) as restarted:
+                self.assertEqual((await (await restarted.get(path, headers=self.headers)).json())["links"], [])
+            self.assertEqual({entry["telegram_id"] for entry in thanksgiving.all_entries()}, {202})
 
     async def test_thanksgiving_storage_error_is_not_acknowledged(self):
         from storage import thanksgiving
 
+        existing = "https://www.smule.com/sing-recording/12345_67891"
+        stored = json.dumps({existing: {"telegram_id": 101}}).encode()
         unavailable = SimpleNamespace(
-            get_object=lambda **_: {"Body": BytesIO(b"{}")},
+            get_object=lambda **_: {"Body": BytesIO(stored)},
             put_object=Mock(side_effect=ClientError({"Error": {"Code": "AccessDenied"}}, "PutObject")),
         )
         with patch.object(thanksgiving, "s3_storage", return_value=(unavailable, "bucket", "hall.csv")), \
@@ -147,7 +160,10 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
                 "url": "https://www.smule.com/sing-recording/12345_67890", "accepted_rules": True,
             })
             self.assertEqual(result.status, 503)
-        unavailable.put_object.assert_called_once()
+            result = await self.client.delete("/api/thanksgiving", headers=self.headers, json={"url": existing})
+            self.assertEqual(result.status, 503)
+            self.assertEqual(thanksgiving.user_links(101), [existing])
+        self.assertEqual(unavailable.put_object.call_count, 2)
 
     async def test_thanksgiving_export_requires_admin_private_chat(self):
         from commands.thanksgiving import thanksgiving_entries

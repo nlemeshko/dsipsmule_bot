@@ -204,20 +204,62 @@ function updateThanksgivingForm() {
   accepted.disabled = thanksgivingBusy;
   $("thanksgiving-submit").disabled = thanksgivingBusy;
   $("thanksgiving-url").readOnly = thanksgivingBusy;
+  $("thanksgiving-links").querySelectorAll("button").forEach(button => { button.disabled = thanksgivingBusy; });
 }
 
 function renderThanksgiving(result) {
   thanksgivingOpen = result.open;
-  $("thanksgiving-saved").hidden = !result.links.length;
+  $("thanksgiving-saved").hidden = false;
+  $("thanksgiving-empty").hidden = Boolean(result.links.length);
   $("thanksgiving-links").replaceChildren(...result.links.map((url, index) => {
     const item = document.createElement("li");
     const link = document.createElement("a");
     link.href = safeURL(url);
     link.textContent = `Работа ${index + 1} · ${url.split("/").at(-1)}`;
     link.addEventListener("click", event => { event.preventDefault(); openLink(link.href); });
-    item.append(link);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "back thanksgiving-remove";
+    remove.textContent = "Удалить";
+    remove.setAttribute("aria-label", `Удалить работу ${index + 1}`);
+    remove.addEventListener("click", () => confirmThanksgivingRemoval(url));
+    item.append(link, remove);
     return item;
   }));
+}
+
+function confirmThanksgivingRemoval(url) {
+  const dialog = $("thanksgiving-remove-dialog");
+  if (thanksgivingBusy || dialog.open) return;
+  dialog.returnValue = "";
+  dialog.addEventListener("close", () => {
+    if (dialog.returnValue === "remove") void removeThanksgiving(url);
+  }, {once: true});
+  dialog.showModal();
+}
+
+async function removeThanksgiving(url) {
+  if (thanksgivingBusy) return;
+  thanksgivingBusy = true;
+  updateThanksgivingForm();
+  const status = $("thanksgiving-remove-status");
+  status.hidden = false;
+  status.dataset.error = false;
+  status.textContent = "Удаляем заявку…";
+  try {
+    const response = await api("/api/thanksgiving", {
+      method: "DELETE", headers: {"Content-Type": "application/json"}, body: JSON.stringify({url}),
+    });
+    renderThanksgiving(await response.json());
+    status.textContent = "Заявка удалена.";
+    if (!$("thanksgiving").hidden) status.focus({preventScroll: true});
+  } catch (error) {
+    status.dataset.error = true;
+    status.textContent = error.message;
+  } finally {
+    thanksgivingBusy = false;
+    updateThanksgivingForm();
+  }
 }
 
 async function loadThanksgiving() {
@@ -302,7 +344,12 @@ $("composer").addEventListener("submit", async event => {
   if (await perform({action: "message", text: $("message-text").value.trim(), kind}, file)) { $("message-text").value = ""; $("file").value = ""; }
 });
 $("file").addEventListener("change", () => { const file = $("file").files[0]; if (file) $("file-kind").value = file.type.startsWith("image/") ? "photo" : data.state === "anon_waiting_text" ? "voice" : "audio"; });
-$("back").addEventListener("click", () => showHome()); tg?.BackButton?.onClick(() => showHome());
+$("back").addEventListener("click", () => showHome());
+tg?.BackButton?.onClick(() => {
+  const dialog = $("thanksgiving-remove-dialog");
+  if (dialog.open) dialog.close("cancel");
+  else showHome();
+});
 document.querySelector(".brand").addEventListener("click", event => { event.preventDefault(); showHome(); });
 $("reset").addEventListener("click", async () => { if (await perform({action: "reset"})) showHome(); });
 $("help").addEventListener("click", () => openItem(["help", "?", "Помощь", "Все возможности твоего музыкального клуба."]));

@@ -37,3 +37,16 @@ async def submit(request):
         logger.exception("Cannot save Thanksgiving contest submission")
         raise web.HTTPServiceUnavailable(reason="Не удалось подтвердить сохранение заявки. Попробуйте ещё раз.")
     return _response(links)
+
+
+async def remove(request):
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise ValueError("Выберите заявку для удаления.")
+    url = thanksgiving.recording_url(body.get("url"))
+    try:
+        links = await asyncio.to_thread(thanksgiving.remove, request["user"]["id"], url)
+    except thanksgiving.ContestStorageError:
+        logger.exception("Cannot remove Thanksgiving contest submission")
+        raise web.HTTPServiceUnavailable(reason="Не удалось подтвердить удаление заявки. Попробуйте ещё раз.")
+    return _response(links)

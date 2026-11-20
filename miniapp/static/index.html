@@ -67,8 +67,20 @@
       </div>
       <div class="thanksgiving-panel" id="thanksgiving-saved" hidden>
         <h2>Мои заявки</h2>
+        <p class="thanksgiving-status" id="thanksgiving-empty" hidden>Здесь появятся отправленные работы.</p>
         <ul class="thanksgiving-links" id="thanksgiving-links"></ul>
+        <p class="thanksgiving-status" id="thanksgiving-remove-status" role="status" tabindex="-1" hidden></p>
       </div>
+      <dialog class="thanksgiving-remove-dialog" id="thanksgiving-remove-dialog" aria-labelledby="thanksgiving-remove-title" aria-describedby="thanksgiving-remove-description">
+        <form method="dialog">
+          <h2 id="thanksgiving-remove-title">Удалить заявку?</h2>
+          <p id="thanksgiving-remove-description">Работа исчезнет из списка заявок конкурса.</p>
+          <div class="thanksgiving-remove-actions">
+            <button class="back" type="submit" value="cancel" autofocus>Отмена</button>
+            <button class="back thanksgiving-remove" type="submit" value="remove">Удалить заявку</button>
+          </div>
+        </form>
+      </dialog>
     </section>
     <section id="workspace" hidden>
       <div class="workspace-heading"><button class="back" type="button" id="back" aria-label="Назад">←</button><div><span class="eyebrow">DSIP CLUB</span><h1 id="workspace-title">Контракт</h1></div></div>

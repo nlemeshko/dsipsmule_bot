@@ -68,5 +68,11 @@ footer a{display:inline-block;color:var(--accent);text-decoration:none;margin-to
 .thanksgiving-status { color: var(--muted); margin: 12px 0 0; font-size: 14px; line-height: 1.45 }
 .thanksgiving-status[data-error=true] { color: #ffc1aa }
 .thanksgiving-retry { margin-top: 10px }
-.thanksgiving-links { display: grid; gap: 8px; margin: 0; padding-left: 20px; overflow-wrap: anywhere }
+.thanksgiving-links { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; overflow-wrap: anywhere }
+.thanksgiving-links li { display: flex; align-items: center; justify-content: space-between; gap: 12px }
 .thanksgiving-links a { color: var(--accent) }
+.thanksgiving-remove { color: #ffc1aa; font-size: 13px; flex-shrink: 0 }
+.thanksgiving-remove-dialog { width: min(360px, calc(100% - 32px)); padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--ink) }
+.thanksgiving-remove-dialog::backdrop { background: #120c08bd }
+.thanksgiving-remove-dialog p { color: var(--muted); font-size: 14px; line-height: 1.45 }
+.thanksgiving-remove-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 16px }
