@@ -511,17 +511,28 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict("os.environ", {"MINI_APP_URL": "https://bot.dsipsmule.one"}), patch.object(AppBot, "send_message", capture):
             await locked_private(start_command)(update, AppContext(self.application, bot, 101))
         markup = capture.call_args.kwargs["reply_markup"]
-        self.assertEqual(markup.inline_keyboard[0][0].web_app.url, "https://bot.dsipsmule.one")
-        self.assertEqual(markup.inline_keyboard[1][0].url, "https://dsipsmule.one")
+        home, contest, site = (row[0] for row in markup.inline_keyboard)
+        self.assertEqual(home.text, "Открыть бота")
+        self.assertEqual(home.web_app.url, "https://bot.dsipsmule.one")
+        self.assertEqual(contest.web_app.url, "https://bot.dsipsmule.one?activity=thanksgiving")
+        self.assertEqual(site.url, "https://dsipsmule.one")
         self.assertIn("Ведьмак", capture.call_args.kwargs["text"])
 
         context = AppContext(self.application, bot, 101)
-        context.args = ["activity_thanksgiving"]
-        with patch.dict("os.environ", {"MINI_APP_URL": "https://bot.dsipsmule.one"}), patch.object(AppBot, "send_message", capture):
+        app_url = "https://bot.dsipsmule.one?theme=dark&activity=old"
+        with patch.dict("os.environ", {"MINI_APP_URL": app_url}), patch.object(AppBot, "send_message", capture):
+            context.args = ["activity_thanksgiving"]
             await locked_private(start_command)(update, context)
-        button = capture.call_args.kwargs["reply_markup"].inline_keyboard[0][0]
-        self.assertEqual(button.web_app.url, "https://bot.dsipsmule.one?activity=thanksgiving")
-        self.assertIn("День благодарения", capture.call_args.kwargs["text"])
+            home, contest, site = (row[0] for row in capture.call_args.kwargs["reply_markup"].inline_keyboard)
+            self.assertEqual(home.web_app.url, "https://bot.dsipsmule.one?theme=dark")
+            self.assertEqual(contest.web_app.url, "https://bot.dsipsmule.one?theme=dark&activity=thanksgiving")
+            self.assertEqual(site.url, "https://dsipsmule.one")
+            self.assertIn("День благодарения", capture.call_args.kwargs["text"])
+
+            context.args = ["activity_anon"]
+            await locked_private(start_command)(update, context)
+            button = capture.call_args.kwargs["reply_markup"].inline_keyboard[0][0]
+            self.assertEqual(button.web_app.url, "https://bot.dsipsmule.one?theme=dark&activity=anon")
 
 
 if __name__ == "__main__":
