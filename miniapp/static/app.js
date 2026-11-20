@@ -243,7 +243,7 @@ async function loadThanksgiving() {
   }
 }
 
-$("thanksgiving-banner").addEventListener("click", () => {
+async function openThanksgiving() {
   $("home").hidden = true;
   $("workspace").hidden = true;
   $("thanksgiving").hidden = false;
@@ -251,8 +251,9 @@ $("thanksgiving-banner").addEventListener("click", () => {
   tg?.BackButton?.show();
   window.scrollTo({top: 0});
   $("thanksgiving-title").focus({preventScroll: true});
-  void loadThanksgiving();
-});
+  await loadThanksgiving();
+}
+$("thanksgiving-banner").addEventListener("click", openThanksgiving);
 $("thanksgiving-back").addEventListener("click", () => showHome());
 $("thanksgiving-accepted").addEventListener("change", updateThanksgivingForm);
 $("thanksgiving-retry").addEventListener("click", loadThanksgiving);
@@ -313,6 +314,7 @@ async function boot() {
   const activity = new URLSearchParams(location.search).get("activity");
   const item = Object.values(catalog).flat().find(item => item[0] === activity);
   if (!tg?.initData) {
+    if (activity === "thanksgiving") return openThanksgiving();
     if (item) {
       const card = document.querySelector(`[data-activity="${item[0]}"]`);
       card.classList.add("linked-activity");
@@ -327,7 +329,8 @@ async function boot() {
     $("greeting").textContent = `${data.user.first_name}, пой, делись и будь частью сообщества.`;
     $("avatar").textContent = data.user.first_name.slice(0, 1).toUpperCase();
     if (!$("thanksgiving").hidden) return;
-    if (item) await openItem(item);
+    if (activity === "thanksgiving") await openThanksgiving();
+    else if (item) await openItem(item);
     else if (data.state || data.playing || data.guessing) showWorkspace(["resume", "", "Продолжить", "Твой незавершённый контракт. Продолжи с текущего шага."]);
   } catch (error) { notice(error.message); }
 }

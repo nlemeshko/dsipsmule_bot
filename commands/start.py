@@ -19,12 +19,17 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parts = urlsplit(app_url)
             params = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True) if key != "activity"]
             app_url = urlunsplit(parts._replace(query=urlencode([*params, ("activity", match[1])])))
-        rows = [[InlineKeyboardButton("Открыть приложение Ведьмака ↗", web_app=WebAppInfo(app_url))]]
-        text = (
-            "🗡️ Ведьмак на связи. Добро пожаловать в DSIP Smule!\n\n"
-            "Анонимки, песни, оценки, промо, игры, голосовой Геральт и зал славы — "
-            "всё в одном приложении.\n\nНажми кнопку ниже или «Открыть приложение» в меню бота."
-        )
+        if payload == "activity_thanksgiving":
+            label = "Открыть правила и подать работу"
+            text = "🍂 День благодарения · DSIP Smule\n\nОткрой правила конкурса, чтобы отправить свою запись из Smule."
+        else:
+            label = "Открыть приложение Ведьмака ↗"
+            text = (
+                "🗡️ Ведьмак на связи. Добро пожаловать в DSIP Smule!\n\n"
+                "Анонимки, песни, оценки, промо, игры, голосовой Геральт и зал славы — "
+                "всё в одном приложении.\n\nНажми кнопку ниже или «Открыть приложение» в меню бота."
+            )
+        rows = [[InlineKeyboardButton(label, web_app=WebAppInfo(app_url))]]
     elif private:
         rows = [
             [InlineKeyboardButton("🕵 Анонимка", callback_data="button1"), InlineKeyboardButton("🎶 Песня", callback_data="button2")],

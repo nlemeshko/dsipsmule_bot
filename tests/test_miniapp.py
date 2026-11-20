@@ -499,6 +499,14 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(markup.inline_keyboard[1][0].url, "https://dsipsmule.one")
         self.assertIn("Ведьмак", capture.call_args.kwargs["text"])
 
+        context = AppContext(self.application, bot, 101)
+        context.args = ["activity_thanksgiving"]
+        with patch.dict("os.environ", {"MINI_APP_URL": "https://bot.dsipsmule.one"}), patch.object(AppBot, "send_message", capture):
+            await locked_private(start_command)(update, context)
+        button = capture.call_args.kwargs["reply_markup"].inline_keyboard[0][0]
+        self.assertEqual(button.web_app.url, "https://bot.dsipsmule.one?activity=thanksgiving")
+        self.assertIn("День благодарения", capture.call_args.kwargs["text"])
+
 
 if __name__ == "__main__":
     unittest.main()
