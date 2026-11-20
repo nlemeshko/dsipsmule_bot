@@ -219,7 +219,7 @@ function renderThanksgiving(result) {
     link.addEventListener("click", event => { event.preventDefault(); openLink(link.href); });
     const remove = document.createElement("button");
     remove.type = "button";
-    remove.className = "back thanksgiving-remove";
+    remove.className = "thanksgiving-action thanksgiving-remove";
     remove.textContent = "Удалить";
     remove.setAttribute("aria-label", `Удалить работу ${index + 1}`);
     remove.addEventListener("click", () => confirmThanksgivingRemoval(url));

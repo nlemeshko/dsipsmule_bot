@@ -63,7 +63,7 @@
           <button class="primary" id="thanksgiving-submit" type="submit">Отправить ссылку <span aria-hidden="true">↗</span></button>
         </form>
         <p class="thanksgiving-status" id="thanksgiving-status" role="status" hidden></p>
-        <button class="back thanksgiving-retry" id="thanksgiving-retry" type="button" hidden>Повторить загрузку</button>
+        <button class="thanksgiving-action thanksgiving-retry" id="thanksgiving-retry" type="button" hidden>Повторить загрузку</button>
       </div>
       <div class="thanksgiving-panel" id="thanksgiving-saved" hidden>
         <h2>Мои заявки</h2>
@@ -76,8 +76,8 @@
           <h2 id="thanksgiving-remove-title">Удалить заявку?</h2>
           <p id="thanksgiving-remove-description">Работа исчезнет из списка заявок конкурса.</p>
           <div class="thanksgiving-remove-actions">
-            <button class="back" type="submit" value="cancel" autofocus>Отмена</button>
-            <button class="back thanksgiving-remove" type="submit" value="remove">Удалить заявку</button>
+            <button class="thanksgiving-action" type="submit" value="cancel" autofocus>Отмена</button>
+            <button class="thanksgiving-action thanksgiving-remove" type="submit" value="remove">Удалить заявку</button>
           </div>
         </form>
       </dialog>
