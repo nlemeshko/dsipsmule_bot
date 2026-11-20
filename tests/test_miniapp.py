@@ -121,7 +121,9 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(second.status, 200)
 
             same_recording = {"url": "https://smule.com/recording/p/12345_67890?shared=1", "accepted_rules": True}
-            self.assertEqual((await self.client.post(path, json=same_recording, headers=other)).status, 409)
+            duplicate = await self.client.post(path, json=same_recording, headers={"X-Telegram-Init-Data": signed(303)})
+            self.assertEqual(duplicate.status, 409)
+            self.assertIn("Эту запись уже подали", (await duplicate.json())["error"])
 
             clock.now = lambda _: thanksgiving.CLOSES_AT
             async with TestClient(TestServer(MiniAppServer(self.application, TOKEN).app)) as restarted:
@@ -144,6 +146,37 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual((await (await restarted.get(path, headers=self.headers)).json())["links"], [])
             self.assertEqual({entry["telegram_id"] for entry in thanksgiving.all_entries()}, {202})
 
+    async def test_thanksgiving_allows_only_one_active_submission_per_account(self):
+        from storage import thanksgiving
+
+        stored = b"{}"
+
+        def put_object(*, Bucket, Key, Body, ContentType):
+            nonlocal stored
+            stored = Body
+
+        s3 = SimpleNamespace(get_object=lambda **_: {"Body": BytesIO(stored)}, put_object=put_object)
+        clock = SimpleNamespace(now=lambda _: thanksgiving.CLOSES_AT - timedelta(seconds=1))
+        path = "/api/thanksgiving"
+        urls = ["https://www.smule.com/sing-recording/12345_67890", "https://www.smule.com/sing-recording/12345_67891"]
+        with patch.object(thanksgiving, "s3_storage", return_value=(s3, "bucket", "hall.csv")), \
+                patch("miniapp.thanksgiving.datetime", clock):
+            responses = await asyncio.gather(*(
+                self.client.post(path, json={"url": url, "accepted_rules": True}, headers=self.headers) for url in urls
+            ))
+            self.assertEqual({response.status for response in responses}, {200, 409})
+            accepted = next(url for url, response in zip(urls, responses) if response.status == 200)
+            alternative = next(url for url in urls if url != accepted)
+            rejected = next(response for response in responses if response.status == 409)
+            self.assertIn("только одну работу", (await rejected.json())["error"])
+            repeated = await self.client.post(path, json={"url": accepted, "accepted_rules": True}, headers=self.headers)
+            self.assertEqual(await repeated.json(), {"open": True, "links": [accepted]})
+            removed = await self.client.delete(path, json={"url": accepted}, headers=self.headers)
+            self.assertEqual(await removed.json(), {"open": True, "links": []})
+            replacement = await self.client.post(path, json={"url": alternative, "accepted_rules": True}, headers=self.headers)
+            self.assertEqual(replacement.status, 200)
+            self.assertEqual(await replacement.json(), {"open": True, "links": [alternative]})
+
     async def test_thanksgiving_storage_error_is_not_acknowledged(self):
         from storage import thanksgiving
 
@@ -156,7 +189,7 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(thanksgiving, "s3_storage", return_value=(unavailable, "bucket", "hall.csv")), \
                 patch("miniapp.thanksgiving.datetime", SimpleNamespace(now=lambda _: datetime(2026, 11, 22, tzinfo=UTC))), \
                 self.assertLogs("miniapp.thanksgiving", level="ERROR"):
-            result = await self.client.post("/api/thanksgiving", headers=self.headers, json={
+            result = await self.client.post("/api/thanksgiving", headers={"X-Telegram-Init-Data": signed(202)}, json={
                 "url": "https://www.smule.com/sing-recording/12345_67890", "accepted_rules": True,
             })
             self.assertEqual(result.status, 503)

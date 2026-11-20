@@ -47,6 +47,7 @@
         <h2>Правила конкурса</h2>
         <ol class="thanksgiving-rules">
           <li><strong>Только новые записи из Smule.</strong> Принимаются работы, записанные 21 ноября 2026 года или позже. Повторная публикация старой записи не считается новой работой.</li>
+          <li><strong>Одна работа от участника.</strong> Чтобы заменить работу, удалите текущую заявку и отправьте новую до окончания приёма.</li>
           <li><strong>Соло и дуэты.</strong> Для дуэта достаточно одной заявки. Перед отправкой согласуйте с партнёром участие и показ выступления на стриме.</li>
           <li><strong>Любая музыка и любые изменения текста.</strong> Можно выбрать любой жанр, аранжировку и язык исполнения, переписать отдельные строки или весь текст песни.</li>
           <li><strong>Поделитесь прямой ссылкой на выступление.</strong> Проверьте, что запись открывается без входа в аккаунт, и оставьте её доступной до окончания стрима.</li>
@@ -62,6 +63,7 @@
           <input id="thanksgiving-url" type="url" inputmode="url" maxlength="2048" placeholder="https://www.smule.com/sing-recording/…" required>
           <button class="primary" id="thanksgiving-submit" type="submit">Отправить ссылку <span aria-hidden="true">↗</span></button>
         </form>
+        <p class="thanksgiving-status" id="thanksgiving-limit" hidden>Вы уже подали работу. Чтобы заменить её, удалите текущую заявку в разделе «Мои заявки».</p>
         <p class="thanksgiving-status" id="thanksgiving-status" role="status" hidden></p>
         <button class="thanksgiving-action thanksgiving-retry" id="thanksgiving-retry" type="button" hidden>Повторить загрузку</button>
       </div>

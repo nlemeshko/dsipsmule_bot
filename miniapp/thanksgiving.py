@@ -31,7 +31,7 @@ async def submit(request):
     url = thanksgiving.recording_url(body.get("url"))
     try:
         links = await asyncio.to_thread(thanksgiving.submit, request["user"], url, received_at)
-    except (thanksgiving.ContestClosed, thanksgiving.DuplicateSubmission) as exc:
+    except (thanksgiving.ContestClosed, thanksgiving.SubmissionConflict) as exc:
         raise web.HTTPConflict(reason=str(exc)) from exc
     except thanksgiving.ContestStorageError:
         logger.exception("Cannot save Thanksgiving contest submission")

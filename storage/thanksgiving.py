@@ -21,7 +21,7 @@ class ContestStorageError(RuntimeError):
     pass
 
 
-class DuplicateSubmission(ValueError):
+class SubmissionConflict(ValueError):
     pass
 
 
@@ -104,13 +104,15 @@ def submit(user, url, received_at):
     with LOCK:
         client, bucket = _storage()
         entries = _read(client, bucket)
-        previous = entries.get(url)
-        if previous and previous["telegram_id"] == user["id"]:
-            return _own_links(entries, user["id"])
+        own_links = _own_links(entries, user["id"])
+        if url in own_links:
+            return own_links
         if received_at >= CLOSES_AT:
             raise ContestClosed("Приём работ завершён.")
-        if previous:
-            raise DuplicateSubmission("Эту запись уже подали на конкурс. Для дуэта достаточно одной заявки.")
+        if own_links:
+            raise SubmissionConflict("Можно подать только одну работу. Чтобы заменить её, удалите текущую заявку.")
+        if url in entries:
+            raise SubmissionConflict("Эту запись уже подали на конкурс. Для дуэта достаточно одной заявки.")
 
         username = user.get("username", "")
         entries[url] = {
@@ -121,7 +123,7 @@ def submit(user, url, received_at):
             "rules_version": 1,
         }
         _save(client, bucket, entries)
-        return _own_links(entries, user["id"])
+        return [url]
 
 
 def remove(user_id, url):

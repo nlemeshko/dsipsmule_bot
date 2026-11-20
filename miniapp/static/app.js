@@ -45,7 +45,7 @@ const featureImages = {
   hall: "hall.png", vote: "vote.png", help: "help.png",
 };
 let current = null, data = {messages: []}, pending = false, authenticated = false;
-let thanksgivingOpen = null, thanksgivingBusy = false;
+let thanksgivingOpen = null, thanksgivingBusy = false, thanksgivingHasSubmission = false;
 const blobs = new Map();
 const mediaJobs = new Map();
 function notice(text) { $("notice").textContent = text; $("notice").hidden = !text; }
@@ -199,8 +199,10 @@ function thanksgivingStatus(text, error = false) {
 
 function updateThanksgivingForm() {
   const accepted = $("thanksgiving-accepted");
-  $("thanksgiving-agreement").hidden = thanksgivingOpen === false || !tg?.initData;
-  $("thanksgiving-form").hidden = thanksgivingOpen !== true || !accepted.checked;
+  const canSubmit = thanksgivingOpen === true && !thanksgivingHasSubmission;
+  $("thanksgiving-agreement").hidden = !canSubmit;
+  $("thanksgiving-form").hidden = !canSubmit || !accepted.checked;
+  $("thanksgiving-limit").hidden = !(thanksgivingOpen && thanksgivingHasSubmission);
   accepted.disabled = thanksgivingBusy;
   $("thanksgiving-submit").disabled = thanksgivingBusy;
   $("thanksgiving-url").readOnly = thanksgivingBusy;
@@ -209,8 +211,9 @@ function updateThanksgivingForm() {
 
 function renderThanksgiving(result) {
   thanksgivingOpen = result.open;
+  thanksgivingHasSubmission = result.links.length > 0;
   $("thanksgiving-saved").hidden = false;
-  $("thanksgiving-empty").hidden = Boolean(result.links.length);
+  $("thanksgiving-empty").hidden = thanksgivingHasSubmission;
   $("thanksgiving-links").replaceChildren(...result.links.map((url, index) => {
     const item = document.createElement("li");
     const link = document.createElement("a");
@@ -251,6 +254,7 @@ async function removeThanksgiving(url) {
       method: "DELETE", headers: {"Content-Type": "application/json"}, body: JSON.stringify({url}),
     });
     renderThanksgiving(await response.json());
+    thanksgivingStatus(thanksgivingOpen ? "" : "Приём работ завершён.");
     status.textContent = "Заявка удалена.";
     if (!$("thanksgiving").hidden) status.focus({preventScroll: true});
   } catch (error) {
@@ -301,7 +305,7 @@ $("thanksgiving-accepted").addEventListener("change", updateThanksgivingForm);
 $("thanksgiving-retry").addEventListener("click", loadThanksgiving);
 $("thanksgiving-form").addEventListener("submit", async event => {
   event.preventDefault();
-  if (thanksgivingBusy || thanksgivingOpen !== true || !$("thanksgiving-accepted").checked) return;
+  if (thanksgivingBusy || thanksgivingOpen !== true || thanksgivingHasSubmission || !$("thanksgiving-accepted").checked) return;
   thanksgivingBusy = true;
   updateThanksgivingForm();
   thanksgivingStatus("Сохраняем заявку…");
@@ -313,6 +317,7 @@ $("thanksgiving-form").addEventListener("submit", async event => {
     });
     renderThanksgiving(await response.json());
     input.value = "";
+    $("thanksgiving-remove-status").hidden = true;
     thanksgivingStatus(thanksgivingOpen ? "Заявка сохранена." : "Заявка сохранена. Приём работ завершён.");
   } catch (error) {
     thanksgivingStatus(error.message, true);
