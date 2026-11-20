@@ -8,3 +8,65 @@ footer a{display:inline-block;color:var(--accent);text-decoration:none;margin-to
 .feature-image{display:block;width:100%;max-height:280px;object-fit:contain;border-radius:16px;margin:20px 0;background:var(--surface);border:1px solid var(--line)}
 
 .card.linked-activity { outline: 2px solid #deb87a; outline-offset: 2px; scroll-margin: 72px }
+
+.thanksgiving-banner {
+  display: grid;
+  width: 100%;
+  text-align: left;
+  overflow: hidden;
+  border: 1px solid #8e5334;
+  border-radius: 22px;
+  margin: 0 0 18px;
+  padding: 0;
+  background: #2d140c;
+  color: #fff0d8;
+  box-shadow: 0 14px 32px #0006;
+}
+.thanksgiving-art { display: block; width: 100%; height: auto }
+.thanksgiving-copy {
+  position: relative;
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  padding: clamp(17px, 4.8vw, 30px);
+  background: radial-gradient(ellipse at right top, #6a2f1b, transparent 73%), #301910;
+}
+.thanksgiving-copy::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: linear-gradient(90deg, #935331 25%, #f8ca83 49%, #935331 74%);
+  background-size: 220% 100%;
+  animation: thanksgiving-light 4s ease-in-out 2 alternate;
+}
+.thanksgiving-copy .eyebrow { color: #ffc88e }
+.thanksgiving-copy strong { font: 700 clamp(25px, 7.1vw, 48px)/1.08 Georgia, serif; letter-spacing: -.045em; text-wrap: balance }
+.thanksgiving-copy > span:nth-last-child(2) { color: #ffe0bb; font-size: 13px }
+.thanksgiving-cta { display: inline-flex; gap: 10px; align-items: center; padding: 10px 13px; border-radius: 9px; margin-top: 6px; background: #ffd098; color: #2d160d; font-size: 13px; font-weight: 750 }
+.thanksgiving-banner:hover .thanksgiving-cta { background: #ffe1b8 }
+.thanksgiving-banner:focus-visible { outline: 2px solid #ffe1b8; outline-offset: 3px }
+@keyframes thanksgiving-light { from { background-position: 0% 0 } to { background-position: 100% 0 } }
+@media (prefers-reduced-motion: reduce) { .thanksgiving-copy::before { animation: none } }
+
+.thanksgiving .workspace-heading { margin-bottom: 18px }
+.thanksgiving h1 { font-size: clamp(24px, 6.5vw, 40px); overflow-wrap: anywhere }
+.thanksgiving h2 { margin: 0 0 14px; font-size: 19px }
+.thanksgiving-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 14px }
+.thanksgiving-dates > div, .thanksgiving-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px }
+.thanksgiving-dates dt, .thanksgiving-dates small { color: var(--muted); font-size: 12px }
+.thanksgiving-dates dd { margin: 5px 0 0; color: #ffd098; font-weight: 700; font-size: 14px }
+.thanksgiving-dates small { display: block; margin-top: 3px; font-weight: 400 }
+.thanksgiving-panel { margin-bottom: 12px }
+.thanksgiving-rules { display: grid; gap: 13px; margin: 0; padding-left: 22px; color: var(--muted); font-size: 14px; line-height: 1.55 }
+.thanksgiving-rules strong { color: var(--ink) }
+.thanksgiving-rules li::marker { color: var(--accent); font-weight: 700 }
+.thanksgiving-agreement { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; font-size: 14px; line-height: 1.45 }
+.thanksgiving-agreement input { flex: none; width: 19px; height: 19px; margin: 0; accent-color: var(--accent) }
+.thanksgiving-form { display: grid; gap: 9px; margin-top: 15px }
+.thanksgiving-form input[type=url] { width: 100%; min-width: 0; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit }
+.thanksgiving-status { color: var(--muted); margin: 12px 0 0; font-size: 14px; line-height: 1.45 }
+.thanksgiving-status[data-error=true] { color: #ffc1aa }
+.thanksgiving-retry { margin-top: 10px }
+.thanksgiving-links { display: grid; gap: 8px; margin: 0; padding-left: 20px; overflow-wrap: anywhere }
+.thanksgiving-links a { color: var(--accent) }

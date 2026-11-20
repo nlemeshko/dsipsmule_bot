@@ -1,5 +1,6 @@
 """Offline contract tests: signed identity, legacy workflows and moderation routing."""
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -7,12 +8,15 @@ import time
 import unittest
 import tempfile
 from collections import defaultdict
+from datetime import UTC, datetime, timedelta
+from io import BytesIO
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 from urllib.parse import urlencode
 
 from aiohttp import FormData
 from aiohttp.test_utils import TestClient, TestServer
+from botocore.exceptions import ClientError
 from telegram import Message
 
 from miniapp.auth import validate_init_data, miniapp_url
@@ -82,6 +86,88 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         r = await self.client.post("/api/action", headers=self.headers, json={"action": "command", "command": "arbitrary", "request_id": "request-0000"})
         self.assertEqual(r.status, 400)
         self.bot.send_message.assert_not_called()
+
+    async def test_thanksgiving_submissions_survive_server_restart(self):
+        from storage import thanksgiving
+
+        objects = {}
+
+        def get_object(*, Bucket, Key):
+            try:
+                content = objects[Bucket, Key]
+            except KeyError as exc:
+                raise ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject") from exc
+            return {"Body": BytesIO(content)}
+
+        def put_object(*, Bucket, Key, Body, ContentType):
+            objects[Bucket, Key] = Body
+
+        s3 = SimpleNamespace(get_object=get_object, put_object=put_object)
+        clock = SimpleNamespace(now=lambda _: thanksgiving.CLOSES_AT - timedelta(seconds=1))
+        path = "/api/thanksgiving"
+        url = "https://www.smule.com/sing-recording/12345_67890"
+        other = {"X-Telegram-Init-Data": signed(202)}
+        with patch.object(thanksgiving, "s3_storage", return_value=(s3, "bucket", "hall.csv")), \
+                patch("miniapp.thanksgiving.datetime", clock):
+            self.assertEqual((await self.client.get(path)).status, 401)
+            self.assertEqual((await self.client.post(path, json={"url": url}, headers=self.headers)).status, 400)
+            self.assertEqual((await self.client.post(path, json={"url": "https://smule.com/username", "accepted_rules": True}, headers=self.headers)).status, 400)
+            first, second = await asyncio.gather(
+                self.client.post(path, json={"url": url, "accepted_rules": True}, headers=self.headers),
+                self.client.post(path, json={"url": url.replace("67890", "67891"), "accepted_rules": True}, headers=other),
+            )
+            self.assertEqual(first.status, 200)
+            self.assertEqual(await first.json(), {"open": True, "links": [url]})
+            self.assertEqual(second.status, 200)
+
+            same_recording = {"url": "https://smule.com/recording/p/12345_67890?shared=1", "accepted_rules": True}
+            self.assertEqual((await self.client.post(path, json=same_recording, headers=other)).status, 409)
+
+            clock.now = lambda _: thanksgiving.CLOSES_AT
+            async with TestClient(TestServer(MiniAppServer(self.application, TOKEN).app)) as restarted:
+                result = await restarted.get(path, headers=self.headers)
+                self.assertEqual(await result.json(), {"open": False, "links": [url]})
+                result = await restarted.post(path, json=same_recording, headers=self.headers)
+                self.assertEqual(result.status, 200)
+                result = await restarted.post(path, json={"url": url.replace("67890", "67892"), "accepted_rules": True}, headers=self.headers)
+                self.assertEqual(result.status, 409)
+            self.assertEqual({entry["telegram_id"] for entry in thanksgiving.all_entries()}, {101, 202})
+
+    async def test_thanksgiving_storage_error_is_not_acknowledged(self):
+        from storage import thanksgiving
+
+        unavailable = SimpleNamespace(
+            get_object=lambda **_: {"Body": BytesIO(b"{}")},
+            put_object=Mock(side_effect=ClientError({"Error": {"Code": "AccessDenied"}}, "PutObject")),
+        )
+        with patch.object(thanksgiving, "s3_storage", return_value=(unavailable, "bucket", "hall.csv")), \
+                patch("miniapp.thanksgiving.datetime", SimpleNamespace(now=lambda _: datetime(2026, 11, 22, tzinfo=UTC))), \
+                self.assertLogs("miniapp.thanksgiving", level="ERROR"):
+            result = await self.client.post("/api/thanksgiving", headers=self.headers, json={
+                "url": "https://www.smule.com/sing-recording/12345_67890", "accepted_rules": True,
+            })
+            self.assertEqual(result.status, 503)
+        unavailable.put_object.assert_called_once()
+
+    async def test_thanksgiving_export_requires_admin_private_chat(self):
+        from commands.thanksgiving import thanksgiving_entries
+
+        message = SimpleNamespace(reply_document=AsyncMock())
+        update = SimpleNamespace(effective_chat=SimpleNamespace(type="group"),
+                                 effective_user=SimpleNamespace(id=101), effective_message=message)
+        entry = {"telegram_id": 101, "telegram_username": "tester", "url": "https://www.smule.com/sing-recording/12345_67890",
+                 "submitted_at": "2026-11-22T00:00:00+00:00", "rules_version": 1}
+        with patch("commands.thanksgiving.get_admin_ids", return_value=[101]), \
+                patch("storage.thanksgiving.all_entries", return_value=[entry]) as load:
+            await thanksgiving_entries(update, None)
+            update.effective_chat.type = "private"
+            update.effective_user.id = 202
+            await thanksgiving_entries(update, None)
+            load.assert_not_called()
+            update.effective_user.id = 101
+            await thanksgiving_entries(update, None)
+        message.reply_document.assert_awaited_once()
+        self.assertIn(entry["url"], message.reply_document.await_args.kwargs["document"].decode("utf-8-sig"))
 
     async def test_anonymous_flow_reuses_moderation_and_is_idempotent(self):
         data = await self.action(action="callback", callback="button1")

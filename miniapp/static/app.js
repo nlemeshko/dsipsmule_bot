@@ -45,6 +45,7 @@ const featureImages = {
   hall: "hall.png", vote: "vote.png", help: "help.png",
 };
 let current = null, data = {messages: []}, pending = false, authenticated = false;
+let thanksgivingOpen = null, thanksgivingBusy = false;
 const blobs = new Map();
 const mediaJobs = new Map();
 function notice(text) { $("notice").textContent = text; $("notice").hidden = !text; }
@@ -150,12 +151,12 @@ function updateComposer() {
   $("quick-replies").replaceChildren();
 }
 function showHome(section = "home") {
-  $("home").hidden = false; $("workspace").hidden = true; tg?.BackButton?.hide();
+  $("home").hidden = false; $("workspace").hidden = true; $("thanksgiving").hidden = true; tg?.BackButton?.hide();
   document.querySelectorAll(".bottom-nav button").forEach(b => b.classList.toggle("active", b.dataset.section === section));
   if (section !== "home") $(section)?.scrollIntoView({behavior: "smooth", block: "start"}); else window.scrollTo({top: 0});
 }
 function showWorkspace(item) {
-  current = item; $("home").hidden = true; $("workspace").hidden = false;
+  current = item; $("home").hidden = true; $("thanksgiving").hidden = true; $("workspace").hidden = false;
   $("workspace-title").textContent = item[2]; $("workspace-description").textContent = item[3];
   const input = inputCommands[item[0]];
   if (input) { $("command-label").textContent = input[0]; $("command-text").placeholder = input[1]; $("command-text").value = ""; $("command-text").required = true; }
@@ -173,7 +174,8 @@ async function perform(body, file = null) {
   if (pending) return false;
   if (!authenticated) { notice("Откройте приложение кнопкой в чате с ботом, чтобы пользоваться функциями."); return false; }
   pending = true; $("busy").hidden = false; notice("");
-  document.querySelectorAll("button").forEach(b => b.disabled = true);
+  const actionButtons = "#home button, #workspace button, .bottom-nav button";
+  document.querySelectorAll(actionButtons).forEach(b => b.disabled = true);
   try {
     const requestId = crypto.randomUUID();
     let response;
@@ -185,8 +187,98 @@ async function perform(body, file = null) {
     $("messages").lastElementChild?.scrollIntoView({behavior: "smooth", block: "nearest"});
     tg?.HapticFeedback?.notificationOccurred("success"); return true;
   } catch (error) { notice(error.message); tg?.HapticFeedback?.notificationOccurred("error"); return false; }
-  finally { pending = false; $("busy").hidden = true; document.querySelectorAll("button").forEach(b => b.disabled = false); }
+  finally { pending = false; $("busy").hidden = true; document.querySelectorAll(actionButtons).forEach(b => b.disabled = false); }
 }
+
+function thanksgivingStatus(text, error = false) {
+  const status = $("thanksgiving-status");
+  status.textContent = text;
+  status.dataset.error = error;
+  status.hidden = !text;
+}
+
+function updateThanksgivingForm() {
+  const accepted = $("thanksgiving-accepted");
+  $("thanksgiving-agreement").hidden = thanksgivingOpen === false || !tg?.initData;
+  $("thanksgiving-form").hidden = thanksgivingOpen !== true || !accepted.checked;
+  accepted.disabled = thanksgivingBusy;
+  $("thanksgiving-submit").disabled = thanksgivingBusy;
+  $("thanksgiving-url").readOnly = thanksgivingBusy;
+}
+
+function renderThanksgiving(result) {
+  thanksgivingOpen = result.open;
+  $("thanksgiving-saved").hidden = !result.links.length;
+  $("thanksgiving-links").replaceChildren(...result.links.map((url, index) => {
+    const item = document.createElement("li");
+    const link = document.createElement("a");
+    link.href = safeURL(url);
+    link.textContent = `Работа ${index + 1} · ${url.split("/").at(-1)}`;
+    link.addEventListener("click", event => { event.preventDefault(); openLink(link.href); });
+    item.append(link);
+    return item;
+  }));
+}
+
+async function loadThanksgiving() {
+  if (thanksgivingBusy) return;
+  $("thanksgiving-retry").hidden = true;
+  if (!tg?.initData) {
+    thanksgivingStatus("Откройте мини-приложение через Telegram-бота, чтобы отправить работу.");
+    updateThanksgivingForm();
+    return;
+  }
+  thanksgivingBusy = true;
+  updateThanksgivingForm();
+  thanksgivingStatus("Загружаем заявки…");
+  try {
+    renderThanksgiving(await (await api("/api/thanksgiving")).json());
+    thanksgivingStatus(thanksgivingOpen ? "" : "Приём работ завершён.");
+  } catch (error) {
+    thanksgivingStatus(error.message, true);
+    $("thanksgiving-retry").hidden = false;
+  } finally {
+    thanksgivingBusy = false;
+    updateThanksgivingForm();
+  }
+}
+
+$("thanksgiving-banner").addEventListener("click", () => {
+  $("home").hidden = true;
+  $("workspace").hidden = true;
+  $("thanksgiving").hidden = false;
+  notice("");
+  tg?.BackButton?.show();
+  window.scrollTo({top: 0});
+  $("thanksgiving-title").focus({preventScroll: true});
+  void loadThanksgiving();
+});
+$("thanksgiving-back").addEventListener("click", () => showHome());
+$("thanksgiving-accepted").addEventListener("change", updateThanksgivingForm);
+$("thanksgiving-retry").addEventListener("click", loadThanksgiving);
+$("thanksgiving-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (thanksgivingBusy || thanksgivingOpen !== true || !$("thanksgiving-accepted").checked) return;
+  thanksgivingBusy = true;
+  updateThanksgivingForm();
+  thanksgivingStatus("Сохраняем заявку…");
+  const input = $("thanksgiving-url");
+  try {
+    const response = await api("/api/thanksgiving", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({url: input.value.trim(), accepted_rules: true}),
+    });
+    renderThanksgiving(await response.json());
+    input.value = "";
+    thanksgivingStatus(thanksgivingOpen ? "Заявка сохранена." : "Заявка сохранена. Приём работ завершён.");
+  } catch (error) {
+    thanksgivingStatus(error.message, true);
+  } finally {
+    thanksgivingBusy = false;
+    updateThanksgivingForm();
+  }
+});
+
 for (const [section, items] of Object.entries(catalog)) for (const item of items) {
   const card = document.createElement("button"); card.type = "button"; card.className = "card";
   card.dataset.activity = item[0];
@@ -234,6 +326,7 @@ async function boot() {
     data = await (await api("/api/bootstrap")).json(); authenticated = true;
     $("greeting").textContent = `${data.user.first_name}, пой, делись и будь частью сообщества.`;
     $("avatar").textContent = data.user.first_name.slice(0, 1).toUpperCase();
+    if (!$("thanksgiving").hidden) return;
     if (item) await openItem(item);
     else if (data.state || data.playing || data.guessing) showWorkspace(["resume", "", "Продолжить", "Твой незавершённый контракт. Продолжи с текущего шага."]);
   } catch (error) { notice(error.message); }

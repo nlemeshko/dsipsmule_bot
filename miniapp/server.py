@@ -16,14 +16,14 @@ from aiohttp import web
 from miniapp.auth import validate_init_data
 from miniapp.bridge import AppBot, AppContext, make_update
 from miniapp.locks import user_lock
-from miniapp import site
+from miniapp import site, thanksgiving
 
 logger = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "static"
 ARTWORK = STATIC.parent.parent / "images"
 ARTWORK_NAMES = {"anon.png", "ask.png", "casino.png", "hall.png", "halllist.png", "help.png",
                  "piar.png", "pole.png", "prediction.png", "rate.png",
-                 "sing.png", "vote.png"}
+                 "sing.png", "vote.png", "thanksgiving.png"}
 MAX_UPLOAD = 20 * 1024 * 1024
 PRIMARY_CALLBACKS = {"button1", "button2", "button3", "button4", "button6"}
 
@@ -113,6 +113,7 @@ class MiniAppServer:
             web.get("/", self.index), web.get("/healthz", self.health),
             web.get("/api/bootstrap", self.bootstrap), web.post("/api/action", self.action),
             web.post("/api/upload", self.upload), web.get("/api/media/{key}", self.media_response),
+            web.get("/api/thanksgiving", thanksgiving.status), web.post("/api/thanksgiving", thanksgiving.submit),
             web.get("/app.js", self.static), web.get("/styles.css", self.static),
             web.get("/assets/{name}", self.artwork),
             web.get("/site-api/bootstrap", self.bootstrap), web.post("/site-api/action", self.action),

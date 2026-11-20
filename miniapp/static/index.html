@@ -18,12 +18,57 @@
     <p id="notice" class="notice" role="status" hidden></p>
     <section id="home">
       <div class="intro"><span class="eyebrow">МУЗЫКАЛЬНЫЕ КОНТРАКТЫ ВЕДЬМАКА</span><h1>Здесь звучишь <em>ты.</em></h1><p id="greeting">Пой, делись и будь частью сообщества.</p></div>
+      <button class="thanksgiving-banner" id="thanksgiving-banner" type="button">
+        <img class="thanksgiving-art" src="/assets/thanksgiving.png" width="1024" height="434" alt="">
+        <span class="thanksgiving-copy">
+          <span class="eyebrow">МУЗЫКАЛЬНЫЙ КОНКУРС</span>
+          <strong>День благодарения</strong>
+          <span>Приём работ до 27 ноября</span>
+          <span class="thanksgiving-cta">Смотреть правила <span aria-hidden="true">↗</span></span>
+        </span>
+      </button>
       <a class="hero" id="site-card" href="https://dsipsmule.one" target="_blank" rel="noopener noreferrer"><span class="hero-copy"><span class="pill">ОФИЦИАЛЬНЫЙ САЙТ</span><strong>Музыка.<br>Магия. Smule.</strong><span>Наши истории и любимые голоса — на dsipsmule.one</span><span class="hero-link">В клуб DSIP Smule <b>↗</b></span></span><span class="hero-art" aria-hidden="true"><span class="disc"><span class="disc-center">✦</span></span><span class="star">✦</span><span class="music-note">♪</span></span></a>
       <section class="catalog-section"><div class="section-heading"><h2>На связи с клубом</h2><span>Делись своим</span></div><div class="cards" id="community"></div></section>
       <section class="catalog-section"><div class="section-heading"><h2>Пауза между треками</h2><span>Время для себя</span></div><div class="cards" id="fun"></div></section>
       <section class="catalog-section"><div class="section-heading"><h2>Люди и легенды</h2><span>Голос сообщества</span></div><div class="cards" id="social"></div></section>
       <button class="help-link" id="help" type="button">Что умеет бот? <span>Открыть помощь ↗</span></button>
       <footer>Ведьмак <span>✦</span> DSIP Smule<br><a href="https://dsipsmule.one" target="_blank" rel="noopener noreferrer">dsipsmule.one ↗</a></footer>
+    </section>
+    <section class="thanksgiving" id="thanksgiving" aria-labelledby="thanksgiving-title" hidden>
+      <div class="workspace-heading">
+        <button class="back" id="thanksgiving-back" type="button" aria-label="Назад">←</button>
+        <div><span class="eyebrow">МУЗЫКАЛЬНЫЙ КОНКУРС</span><h1 id="thanksgiving-title" tabindex="-1">День благодарения</h1></div>
+      </div>
+      <dl class="thanksgiving-dates">
+        <div><dt>Приём работ</dt><dd><time datetime="2026-11-27T23:59:00+02:00">27.11.2026 до 23:59</time><small>По киевскому времени</small></dd></div>
+        <div><dt>Стрим</dt><dd><time datetime="2026-11-28">28.11.2026</time><small>Суббота</small></dd></div>
+      </dl>
+      <div class="thanksgiving-panel">
+        <h2>Правила конкурса</h2>
+        <ol class="thanksgiving-rules">
+          <li><strong>Только новые записи из Smule.</strong> Принимаются работы, записанные 21 ноября 2026 года или позже. Повторная публикация старой записи не считается новой работой.</li>
+          <li><strong>Соло и дуэты.</strong> Для дуэта достаточно одной заявки. Перед отправкой согласуйте с партнёром участие и показ выступления на стриме.</li>
+          <li><strong>Любая музыка и любые изменения текста.</strong> Можно выбрать любой жанр, аранжировку и язык исполнения, переписать отдельные строки или весь текст песни.</li>
+          <li><strong>Поделитесь прямой ссылкой на выступление.</strong> Проверьте, что запись открывается без входа в аккаунт, и оставьте её доступной до окончания стрима.</li>
+          <li><strong>Тема конкурса — благодарность.</strong> Если посвящаете песню кому-то, получите согласие, прежде чем упоминать личные подробности.</li>
+          <li><strong>В заявке должна быть ваша работа.</strong> Организаторы проверят дату записи и доступность ссылки перед эфиром. Отправляя заявку, вы соглашаетесь на воспроизведение работы на стриме конкурса.</li>
+        </ol>
+      </div>
+      <div class="thanksgiving-panel">
+        <h2>Отправить работу</h2>
+        <label class="thanksgiving-agreement" id="thanksgiving-agreement"><input id="thanksgiving-accepted" type="checkbox"> Я прочитал(а) правила конкурса и согласен(на) с ними.</label>
+        <form class="thanksgiving-form" id="thanksgiving-form" hidden>
+          <label for="thanksgiving-url">Ссылка на запись в Smule</label>
+          <input id="thanksgiving-url" type="url" inputmode="url" maxlength="2048" placeholder="https://www.smule.com/sing-recording/…" required>
+          <button class="primary" id="thanksgiving-submit" type="submit">Отправить ссылку <span aria-hidden="true">↗</span></button>
+        </form>
+        <p class="thanksgiving-status" id="thanksgiving-status" role="status" hidden></p>
+        <button class="back thanksgiving-retry" id="thanksgiving-retry" type="button" hidden>Повторить загрузку</button>
+      </div>
+      <div class="thanksgiving-panel" id="thanksgiving-saved" hidden>
+        <h2>Мои заявки</h2>
+        <ul class="thanksgiving-links" id="thanksgiving-links"></ul>
+      </div>
     </section>
     <section id="workspace" hidden>
       <div class="workspace-heading"><button class="back" type="button" id="back" aria-label="Назад">←</button><div><span class="eyebrow">DSIP CLUB</span><h1 id="workspace-title">Контракт</h1></div></div>
