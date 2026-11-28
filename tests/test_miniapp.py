@@ -8,15 +8,12 @@ import time
 import unittest
 import tempfile
 from collections import defaultdict
-from datetime import UTC, datetime, timedelta
-from io import BytesIO
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 from urllib.parse import urlencode
 
 from aiohttp import FormData
 from aiohttp.test_utils import TestClient, TestServer
-from botocore.exceptions import ClientError
 from telegram import Message
 
 from miniapp.auth import validate_init_data, miniapp_url
@@ -86,137 +83,6 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         r = await self.client.post("/api/action", headers=self.headers, json={"action": "command", "command": "arbitrary", "request_id": "request-0000"})
         self.assertEqual(r.status, 400)
         self.bot.send_message.assert_not_called()
-
-    async def test_thanksgiving_submissions_survive_server_restart(self):
-        from storage import thanksgiving
-
-        objects = {}
-
-        def get_object(*, Bucket, Key):
-            try:
-                content = objects[Bucket, Key]
-            except KeyError as exc:
-                raise ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject") from exc
-            return {"Body": BytesIO(content)}
-
-        def put_object(*, Bucket, Key, Body, ContentType):
-            objects[Bucket, Key] = Body
-
-        s3 = SimpleNamespace(get_object=get_object, put_object=put_object)
-        clock = SimpleNamespace(now=lambda _: thanksgiving.CLOSES_AT - timedelta(seconds=1))
-        path = "/api/thanksgiving"
-        url = "https://www.smule.com/sing-recording/12345_67890"
-        other = {"X-Telegram-Init-Data": signed(202)}
-        with patch.object(thanksgiving, "s3_storage", return_value=(s3, "bucket", "hall.csv")), \
-                patch("miniapp.thanksgiving.datetime", clock):
-            self.assertEqual((await self.client.get(path)).status, 401)
-            self.assertEqual((await self.client.post(path, json={"url": url}, headers=self.headers)).status, 400)
-            self.assertEqual((await self.client.post(path, json={"url": "https://smule.com/username", "accepted_rules": True}, headers=self.headers)).status, 400)
-            first, second = await asyncio.gather(
-                self.client.post(path, json={"url": url, "accepted_rules": True}, headers=self.headers),
-                self.client.post(path, json={"url": url.replace("67890", "67891"), "accepted_rules": True}, headers=other),
-            )
-            self.assertEqual(first.status, 200)
-            self.assertEqual(await first.json(), {"open": True, "links": [url]})
-            self.assertEqual(second.status, 200)
-
-            same_recording = {"url": "https://smule.com/recording/p/12345_67890?shared=1", "accepted_rules": True}
-            duplicate = await self.client.post(path, json=same_recording, headers={"X-Telegram-Init-Data": signed(303)})
-            self.assertEqual(duplicate.status, 409)
-            self.assertIn("Эту запись уже подали", (await duplicate.json())["error"])
-
-            clock.now = lambda _: thanksgiving.CLOSES_AT
-            async with TestClient(TestServer(MiniAppServer(self.application, TOKEN).app)) as restarted:
-                result = await restarted.get(path, headers=self.headers)
-                self.assertEqual(await result.json(), {"open": False, "links": [url]})
-                result = await restarted.post(path, json=same_recording, headers=self.headers)
-                self.assertEqual(result.status, 200)
-                result = await restarted.post(path, json={"url": url.replace("67890", "67892"), "accepted_rules": True}, headers=self.headers)
-                self.assertEqual(result.status, 409)
-                self.assertEqual((await restarted.delete(path, json={"url": url})).status, 401)
-                self.assertEqual((await restarted.delete(path, json=[], headers=self.headers)).status, 400)
-                foreign = await restarted.delete(path, json={"url": url}, headers=other)
-                self.assertEqual(foreign.status, 200)
-                self.assertIn(url, (await (await restarted.get(path, headers=self.headers)).json())["links"])
-                for _ in range(2):
-                    result = await restarted.delete(path, json=same_recording, headers=self.headers)
-                    self.assertEqual(result.status, 200)
-                    self.assertEqual(await result.json(), {"open": False, "links": []})
-            async with TestClient(TestServer(MiniAppServer(self.application, TOKEN).app)) as restarted:
-                self.assertEqual((await (await restarted.get(path, headers=self.headers)).json())["links"], [])
-            self.assertEqual({entry["telegram_id"] for entry in thanksgiving.all_entries()}, {202})
-
-    async def test_thanksgiving_allows_only_one_active_submission_per_account(self):
-        from storage import thanksgiving
-
-        stored = b"{}"
-
-        def put_object(*, Bucket, Key, Body, ContentType):
-            nonlocal stored
-            stored = Body
-
-        s3 = SimpleNamespace(get_object=lambda **_: {"Body": BytesIO(stored)}, put_object=put_object)
-        clock = SimpleNamespace(now=lambda _: thanksgiving.CLOSES_AT - timedelta(seconds=1))
-        path = "/api/thanksgiving"
-        urls = ["https://www.smule.com/sing-recording/12345_67890", "https://www.smule.com/sing-recording/12345_67891"]
-        with patch.object(thanksgiving, "s3_storage", return_value=(s3, "bucket", "hall.csv")), \
-                patch("miniapp.thanksgiving.datetime", clock):
-            responses = await asyncio.gather(*(
-                self.client.post(path, json={"url": url, "accepted_rules": True}, headers=self.headers) for url in urls
-            ))
-            self.assertEqual({response.status for response in responses}, {200, 409})
-            accepted = next(url for url, response in zip(urls, responses) if response.status == 200)
-            alternative = next(url for url in urls if url != accepted)
-            rejected = next(response for response in responses if response.status == 409)
-            self.assertIn("только одну работу", (await rejected.json())["error"])
-            repeated = await self.client.post(path, json={"url": accepted, "accepted_rules": True}, headers=self.headers)
-            self.assertEqual(await repeated.json(), {"open": True, "links": [accepted]})
-            removed = await self.client.delete(path, json={"url": accepted}, headers=self.headers)
-            self.assertEqual(await removed.json(), {"open": True, "links": []})
-            replacement = await self.client.post(path, json={"url": alternative, "accepted_rules": True}, headers=self.headers)
-            self.assertEqual(replacement.status, 200)
-            self.assertEqual(await replacement.json(), {"open": True, "links": [alternative]})
-
-    async def test_thanksgiving_storage_error_is_not_acknowledged(self):
-        from storage import thanksgiving
-
-        existing = "https://www.smule.com/sing-recording/12345_67891"
-        stored = json.dumps({existing: {"telegram_id": 101}}).encode()
-        unavailable = SimpleNamespace(
-            get_object=lambda **_: {"Body": BytesIO(stored)},
-            put_object=Mock(side_effect=ClientError({"Error": {"Code": "AccessDenied"}}, "PutObject")),
-        )
-        with patch.object(thanksgiving, "s3_storage", return_value=(unavailable, "bucket", "hall.csv")), \
-                patch("miniapp.thanksgiving.datetime", SimpleNamespace(now=lambda _: datetime(2026, 11, 22, tzinfo=UTC))), \
-                self.assertLogs("miniapp.thanksgiving", level="ERROR"):
-            result = await self.client.post("/api/thanksgiving", headers={"X-Telegram-Init-Data": signed(202)}, json={
-                "url": "https://www.smule.com/sing-recording/12345_67890", "accepted_rules": True,
-            })
-            self.assertEqual(result.status, 503)
-            result = await self.client.delete("/api/thanksgiving", headers=self.headers, json={"url": existing})
-            self.assertEqual(result.status, 503)
-            self.assertEqual(thanksgiving.user_links(101), [existing])
-        self.assertEqual(unavailable.put_object.call_count, 2)
-
-    async def test_thanksgiving_export_requires_admin_private_chat(self):
-        from commands.thanksgiving import thanksgiving_entries
-
-        message = SimpleNamespace(reply_document=AsyncMock())
-        update = SimpleNamespace(effective_chat=SimpleNamespace(type="group"),
-                                 effective_user=SimpleNamespace(id=101), effective_message=message)
-        entry = {"telegram_id": 101, "telegram_username": "tester", "url": "https://www.smule.com/sing-recording/12345_67890",
-                 "submitted_at": "2026-11-22T00:00:00+00:00", "rules_version": 1}
-        with patch("commands.thanksgiving.get_admin_ids", return_value=[101]), \
-                patch("storage.thanksgiving.all_entries", return_value=[entry]) as load:
-            await thanksgiving_entries(update, None)
-            update.effective_chat.type = "private"
-            update.effective_user.id = 202
-            await thanksgiving_entries(update, None)
-            load.assert_not_called()
-            update.effective_user.id = 101
-            await thanksgiving_entries(update, None)
-        message.reply_document.assert_awaited_once()
-        self.assertIn(entry["url"], message.reply_document.await_args.kwargs["document"].decode("utf-8-sig"))
 
     async def test_anonymous_flow_reuses_moderation_and_is_idempotent(self):
         data = await self.action(action="callback", callback="button1")
@@ -530,7 +396,12 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Ведьмак", html)
         self.assertIn('href="https://dsipsmule.one"', html)
         self.assertIn("Музыка.<br>Магия. Smule.", html)
-        self.assertNotIn("Конкурс", html)
+        self.assertNotIn("День благодарения", html)
+        for method in ("GET", "POST", "DELETE"):
+            r = await self.client.request(method, "/api/thanksgiving", headers=self.headers)
+            self.assertEqual(r.status, 404)
+        r = await self.client.get("/assets/thanksgiving.png")
+        self.assertEqual(r.status, 404)
 
     async def test_menu_launcher_and_chat_user_share_a_lock(self):
         from miniapp.locks import user_lock, locked_private
@@ -544,10 +415,9 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict("os.environ", {"MINI_APP_URL": "https://bot.dsipsmule.one"}), patch.object(AppBot, "send_message", capture):
             await locked_private(start_command)(update, AppContext(self.application, bot, 101))
         markup = capture.call_args.kwargs["reply_markup"]
-        home, contest, site = (row[0] for row in markup.inline_keyboard)
+        home, site = (row[0] for row in markup.inline_keyboard)
         self.assertEqual(home.text, "Открыть бота")
         self.assertEqual(home.web_app.url, "https://bot.dsipsmule.one")
-        self.assertEqual(contest.web_app.url, "https://bot.dsipsmule.one?activity=thanksgiving")
         self.assertEqual(site.url, "https://dsipsmule.one")
         self.assertIn("Ведьмак", capture.call_args.kwargs["text"])
 
@@ -556,11 +426,10 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict("os.environ", {"MINI_APP_URL": app_url}), patch.object(AppBot, "send_message", capture):
             context.args = ["activity_thanksgiving"]
             await locked_private(start_command)(update, context)
-            home, contest, site = (row[0] for row in capture.call_args.kwargs["reply_markup"].inline_keyboard)
+            home, site = (row[0] for row in capture.call_args.kwargs["reply_markup"].inline_keyboard)
             self.assertEqual(home.web_app.url, "https://bot.dsipsmule.one?theme=dark")
-            self.assertEqual(contest.web_app.url, "https://bot.dsipsmule.one?theme=dark&activity=thanksgiving")
             self.assertEqual(site.url, "https://dsipsmule.one")
-            self.assertIn("День благодарения", capture.call_args.kwargs["text"])
+            self.assertIn("Ведьмак на связи", capture.call_args.kwargs["text"])
 
             context.args = ["activity_anon"]
             await locked_private(start_command)(update, context)

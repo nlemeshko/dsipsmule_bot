@@ -15,26 +15,19 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if app_url and private:
         payload = context.args[0] if context.args else ""
         match = re.fullmatch(r"activity_([a-z]{1,24})", payload)
-        activity = match[1] if match else "thanksgiving"
+        activity = match[1] if match and match[1] != "thanksgiving" else None
         parts = urlsplit(app_url)
         params = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True) if key != "activity"]
-        activity_url = urlunsplit(parts._replace(query=urlencode([*params, ("activity", activity)])))
-        if activity == "thanksgiving":
-            home_url = urlunsplit(parts._replace(query=urlencode(params)))
-            rows = [
-                [InlineKeyboardButton("Открыть бота", web_app=WebAppInfo(home_url))],
-                [InlineKeyboardButton("Открыть правила и подать работу", web_app=WebAppInfo(activity_url))],
-            ]
-        else:
-            rows = [[InlineKeyboardButton("Открыть приложение Ведьмака ↗", web_app=WebAppInfo(activity_url))]]
-        if payload == "activity_thanksgiving":
-            text = "🍂 День благодарения · DSIP Smule\n\nОткрой правила конкурса, чтобы отправить свою запись из Smule."
-        else:
-            text = (
-                "🗡️ Ведьмак на связи. Добро пожаловать в DSIP Smule!\n\n"
-                "Анонимки, песни, оценки, промо, игры, голосовой Геральт и зал славы — "
-                "всё в одном приложении.\n\nВыбери действие ниже или нажми «Открыть приложение» в меню бота."
-            )
+        if activity:
+            params.append(("activity", activity))
+        target = urlunsplit(parts._replace(query=urlencode(params)))
+        label = "Открыть приложение Ведьмака ↗" if activity else "Открыть бота"
+        rows = [[InlineKeyboardButton(label, web_app=WebAppInfo(target))]]
+        text = (
+            "🗡️ Ведьмак на связи. Добро пожаловать в DSIP Smule!\n\n"
+            "Анонимки, песни, оценки, промо, игры, голосовой Геральт и зал славы — "
+            "всё в одном приложении.\n\nНажми кнопку ниже или «Открыть приложение» в меню бота."
+        )
     elif private:
         rows = [
             [InlineKeyboardButton("🕵 Анонимка", callback_data="button1"), InlineKeyboardButton("🎶 Песня", callback_data="button2")],

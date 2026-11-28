@@ -24,7 +24,6 @@ from commands.ask import ask_command
 from commands.ai import AIRuntime, draw_command, transcribe_command, private_audio, group_message
 from commands.fun import ded_command, passport_command, order_command, guess_command, mood_command, fun_callback
 from commands.titles import verdict_command, titles_command, titles_callback, worker as titles_worker
-from commands.thanksgiving import thanksgiving_entries
 from commands.callback_handler import handle_callback_query
 from commands.fsm_handler import handle_fsm_message, handle_anon_photo
 from miniapp.auth import miniapp_url
@@ -109,7 +108,6 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("start", start_command))
         self.application.add_handler(CommandHandler("help", help_command))
         self.application.add_handler(CommandHandler("app", start_command))
-        self.application.add_handler(CommandHandler("thanksgiving_entries", thanksgiving_entries))
         
         # Команды развлечений
         self.application.add_handler(CommandHandler("prediction", prediction_command))

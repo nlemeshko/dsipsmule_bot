@@ -45,7 +45,6 @@ const featureImages = {
   hall: "hall.png", vote: "vote.png", help: "help.png",
 };
 let current = null, data = {messages: []}, pending = false, authenticated = false;
-let thanksgivingOpen = null, thanksgivingBusy = false, thanksgivingHasSubmission = false;
 const blobs = new Map();
 const mediaJobs = new Map();
 function notice(text) { $("notice").textContent = text; $("notice").hidden = !text; }
@@ -151,12 +150,12 @@ function updateComposer() {
   $("quick-replies").replaceChildren();
 }
 function showHome(section = "home") {
-  $("home").hidden = false; $("workspace").hidden = true; $("thanksgiving").hidden = true; tg?.BackButton?.hide();
+  $("home").hidden = false; $("workspace").hidden = true; tg?.BackButton?.hide();
   document.querySelectorAll(".bottom-nav button").forEach(b => b.classList.toggle("active", b.dataset.section === section));
   if (section !== "home") $(section)?.scrollIntoView({behavior: "smooth", block: "start"}); else window.scrollTo({top: 0});
 }
 function showWorkspace(item) {
-  current = item; $("home").hidden = true; $("thanksgiving").hidden = true; $("workspace").hidden = false;
+  current = item; $("home").hidden = true; $("workspace").hidden = false;
   $("workspace-title").textContent = item[2]; $("workspace-description").textContent = item[3];
   const input = inputCommands[item[0]];
   if (input) { $("command-label").textContent = input[0]; $("command-text").placeholder = input[1]; $("command-text").value = ""; $("command-text").required = true; }
@@ -190,143 +189,6 @@ async function perform(body, file = null) {
   finally { pending = false; $("busy").hidden = true; document.querySelectorAll(actionButtons).forEach(b => b.disabled = false); }
 }
 
-function thanksgivingStatus(text, error = false) {
-  const status = $("thanksgiving-status");
-  status.textContent = text;
-  status.dataset.error = error;
-  status.hidden = !text;
-}
-
-function updateThanksgivingForm() {
-  const accepted = $("thanksgiving-accepted");
-  const canSubmit = thanksgivingOpen === true && !thanksgivingHasSubmission;
-  $("thanksgiving-agreement").hidden = !canSubmit;
-  $("thanksgiving-form").hidden = !canSubmit || !accepted.checked;
-  $("thanksgiving-limit").hidden = !(thanksgivingOpen && thanksgivingHasSubmission);
-  accepted.disabled = thanksgivingBusy;
-  $("thanksgiving-submit").disabled = thanksgivingBusy;
-  $("thanksgiving-url").readOnly = thanksgivingBusy;
-  $("thanksgiving-links").querySelectorAll("button").forEach(button => { button.disabled = thanksgivingBusy; });
-}
-
-function renderThanksgiving(result) {
-  thanksgivingOpen = result.open;
-  thanksgivingHasSubmission = result.links.length > 0;
-  $("thanksgiving-saved").hidden = false;
-  $("thanksgiving-empty").hidden = thanksgivingHasSubmission;
-  $("thanksgiving-links").replaceChildren(...result.links.map((url, index) => {
-    const item = document.createElement("li");
-    const link = document.createElement("a");
-    link.href = safeURL(url);
-    link.textContent = `Работа ${index + 1} · ${url.split("/").at(-1)}`;
-    link.addEventListener("click", event => { event.preventDefault(); openLink(link.href); });
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "thanksgiving-action thanksgiving-remove";
-    remove.textContent = "Удалить";
-    remove.setAttribute("aria-label", `Удалить работу ${index + 1}`);
-    remove.addEventListener("click", () => confirmThanksgivingRemoval(url));
-    item.append(link, remove);
-    return item;
-  }));
-}
-
-function confirmThanksgivingRemoval(url) {
-  const dialog = $("thanksgiving-remove-dialog");
-  if (thanksgivingBusy || dialog.open) return;
-  dialog.returnValue = "";
-  dialog.addEventListener("close", () => {
-    if (dialog.returnValue === "remove") void removeThanksgiving(url);
-  }, {once: true});
-  dialog.showModal();
-}
-
-async function removeThanksgiving(url) {
-  if (thanksgivingBusy) return;
-  thanksgivingBusy = true;
-  updateThanksgivingForm();
-  const status = $("thanksgiving-remove-status");
-  status.hidden = false;
-  status.dataset.error = false;
-  status.textContent = "Удаляем заявку…";
-  try {
-    const response = await api("/api/thanksgiving", {
-      method: "DELETE", headers: {"Content-Type": "application/json"}, body: JSON.stringify({url}),
-    });
-    renderThanksgiving(await response.json());
-    thanksgivingStatus(thanksgivingOpen ? "" : "Приём работ завершён.");
-    status.textContent = "Заявка удалена.";
-    if (!$("thanksgiving").hidden) status.focus({preventScroll: true});
-  } catch (error) {
-    status.dataset.error = true;
-    status.textContent = error.message;
-  } finally {
-    thanksgivingBusy = false;
-    updateThanksgivingForm();
-  }
-}
-
-async function loadThanksgiving() {
-  if (thanksgivingBusy) return;
-  $("thanksgiving-retry").hidden = true;
-  if (!tg?.initData) {
-    thanksgivingStatus("Откройте мини-приложение через Telegram-бота, чтобы отправить работу.");
-    updateThanksgivingForm();
-    return;
-  }
-  thanksgivingBusy = true;
-  updateThanksgivingForm();
-  thanksgivingStatus("Загружаем заявки…");
-  try {
-    renderThanksgiving(await (await api("/api/thanksgiving")).json());
-    thanksgivingStatus(thanksgivingOpen ? "" : "Приём работ завершён.");
-  } catch (error) {
-    thanksgivingStatus(error.message, true);
-    $("thanksgiving-retry").hidden = false;
-  } finally {
-    thanksgivingBusy = false;
-    updateThanksgivingForm();
-  }
-}
-
-async function openThanksgiving() {
-  $("home").hidden = true;
-  $("workspace").hidden = true;
-  $("thanksgiving").hidden = false;
-  notice("");
-  tg?.BackButton?.show();
-  window.scrollTo({top: 0});
-  $("thanksgiving-title").focus({preventScroll: true});
-  await loadThanksgiving();
-}
-$("thanksgiving-banner").addEventListener("click", openThanksgiving);
-$("thanksgiving-back").addEventListener("click", () => showHome());
-$("thanksgiving-accepted").addEventListener("change", updateThanksgivingForm);
-$("thanksgiving-retry").addEventListener("click", loadThanksgiving);
-$("thanksgiving-form").addEventListener("submit", async event => {
-  event.preventDefault();
-  if (thanksgivingBusy || thanksgivingOpen !== true || thanksgivingHasSubmission || !$("thanksgiving-accepted").checked) return;
-  thanksgivingBusy = true;
-  updateThanksgivingForm();
-  thanksgivingStatus("Сохраняем заявку…");
-  const input = $("thanksgiving-url");
-  try {
-    const response = await api("/api/thanksgiving", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({url: input.value.trim(), accepted_rules: true}),
-    });
-    renderThanksgiving(await response.json());
-    input.value = "";
-    $("thanksgiving-remove-status").hidden = true;
-    thanksgivingStatus(thanksgivingOpen ? "Заявка сохранена." : "Заявка сохранена. Приём работ завершён.");
-  } catch (error) {
-    thanksgivingStatus(error.message, true);
-  } finally {
-    thanksgivingBusy = false;
-    updateThanksgivingForm();
-  }
-});
-
 for (const [section, items] of Object.entries(catalog)) for (const item of items) {
   const card = document.createElement("button"); card.type = "button"; card.className = "card";
   card.dataset.activity = item[0];
@@ -350,11 +212,7 @@ $("composer").addEventListener("submit", async event => {
 });
 $("file").addEventListener("change", () => { const file = $("file").files[0]; if (file) $("file-kind").value = file.type.startsWith("image/") ? "photo" : data.state === "anon_waiting_text" ? "voice" : "audio"; });
 $("back").addEventListener("click", () => showHome());
-tg?.BackButton?.onClick(() => {
-  const dialog = $("thanksgiving-remove-dialog");
-  if (dialog.open) dialog.close("cancel");
-  else showHome();
-});
+tg?.BackButton?.onClick(() => showHome());
 document.querySelector(".brand").addEventListener("click", event => { event.preventDefault(); showHome(); });
 $("reset").addEventListener("click", async () => { if (await perform({action: "reset"})) showHome(); });
 $("help").addEventListener("click", () => openItem(["help", "?", "Помощь", "Все возможности твоего музыкального клуба."]));
@@ -366,7 +224,6 @@ async function boot() {
   const activity = new URLSearchParams(location.search).get("activity");
   const item = Object.values(catalog).flat().find(item => item[0] === activity);
   if (!tg?.initData) {
-    if (activity === "thanksgiving") return openThanksgiving();
     if (item) {
       const card = document.querySelector(`[data-activity="${item[0]}"]`);
       card.classList.add("linked-activity");
@@ -380,9 +237,7 @@ async function boot() {
     data = await (await api("/api/bootstrap")).json(); authenticated = true;
     $("greeting").textContent = `${data.user.first_name}, пой, делись и будь частью сообщества.`;
     $("avatar").textContent = data.user.first_name.slice(0, 1).toUpperCase();
-    if (!$("thanksgiving").hidden) return;
-    if (activity === "thanksgiving") await openThanksgiving();
-    else if (item) await openItem(item);
+    if (item) await openItem(item);
     else if (data.state || data.playing || data.guessing) showWorkspace(["resume", "", "Продолжить", "Твой незавершённый контракт. Продолжи с текущего шага."]);
   } catch (error) { notice(error.message); }
 }
